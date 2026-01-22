@@ -24,12 +24,10 @@ jobs:
           echo "Found new cloudflared build: $VERSION"
 
       - name: Create GitHub release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          release_name: Cloudflared ${{ steps.version.outputs.version }}
+          name: Cloudflared ${{ steps.version.outputs.version }}
           body: |
             Automated build of cloudflared ${{ steps.version.outputs.version }} for FreeBSD/OPNsense.
 
@@ -37,7 +35,7 @@ jobs:
 
             ## Installation
 
-            Download the binary from the assets below and install:
+            Download the binary and install:
 
             ```bash
             # Download
@@ -49,20 +47,10 @@ jobs:
             sudo mv cloudflared-${{ steps.version.outputs.version }} /usr/local/bin/cloudflared
             ```
 
-            ## Verification
-
-            SHA256: `${{ steps.sha.outputs.sha256 }}`
-
             Built automatically by freebsd-dev cron job.
+          files: |
+            binaries/cloudflared-${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
-
-      - name: Upload binary to release
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: binaries/cloudflared-${{ steps.version.outputs.version }}
-          asset_name: cloudflared-${{ steps.version.outputs.version }}
-          asset_content_type: application/octet-stream
