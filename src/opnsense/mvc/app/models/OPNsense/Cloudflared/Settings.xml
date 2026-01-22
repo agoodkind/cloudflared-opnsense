@@ -1,0 +1,34 @@
+<model>
+    <mount>//OPNsense/cloudflared</mount>
+    <description>Cloudflared tunnel configuration</description>
+    <version>1.0.0</version>
+    <items>
+        <general>
+            <enabled type="BooleanField">
+                <default>0</default>
+                <Required>Y</Required>
+            </enabled>
+            <token type="TextField">
+                <Required>N</Required>
+                <mask>/^(eyJ[A-Za-z0-9-_]+\.){2}[A-Za-z0-9-_]+$/</mask>
+                <ValidationMessage>Please enter a valid Cloudflare tunnel token</ValidationMessage>
+            </token>
+            <tunnel_name type="TextField">
+                <Required>N</Required>
+            </tunnel_name>
+        </general>
+        <tunnels>
+            <tunnel type="ArrayField">
+                <hostname type="HostnameField">
+                    <Required>Y</Required>
+                </hostname>
+                <service type="TextField">
+                    <Required>Y</Required>
+                </service>
+                <url type="TextField">
+                    <Required>Y</Required>
+                </url>
+            </tunnel>
+        </tunnels>
+    </items>
+</model>

@@ -1,0 +1,201 @@
+name: Build Cloudflared for OPNsense
+
+on:
+  schedule:
+    # Check for new releases every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allow manual trigger
+  push:
+    paths:
+      - '.github/workflows/build-cloudflared.yml'
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.check.outputs.new_version }}
+      should_build: ${{ steps.check.outputs.should_build }}
+
+    steps:
+      - name: Check for new cloudflared release
+        id: check
+        run: |
+          # Get latest release from GitHub API
+          LATEST=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | jq -r '.tag_name')
+
+          # Get current version from previous build (if exists)
+          CURRENT=$(curl -s https://api.github.com/repos/${{ github.repository }}/contents/VERSION.txt 2>/dev/null | jq -r '.content // empty' | base64 -d 2>/dev/null || echo "")
+
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+
+          if [ "$LATEST" != "$CURRENT" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "new_version=$LATEST" >> $GITHUB_OUTPUT
+            echo "New version found: $LATEST (current: $CURRENT)"
+          else
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "Already at latest version: $LATEST"
+          fi
+
+  build:
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: [self-hosted, freebsd]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build cloudflared
+        run: |
+          VERSION="${{ needs.check-release.outputs.new_version }}"
+          echo "Building cloudflared $VERSION"
+
+          # Create build directory
+          BUILD_DIR="/tmp/cloudflared-build-$VERSION"
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
+          cd "$BUILD_DIR"
+
+          # Clone and checkout specific version
+          git clone --depth 1 --branch "$VERSION" https://github.com/cloudflare/cloudflared.git .
+
+          # Apply FreeBSD build fixes
+          sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix.go
+          sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix_test.go
+          cp diagnostic/system_collector_linux.go diagnostic/system_collector_freebsd.go
+          sed -i "" "s/linux/freebsd/" diagnostic/system_collector_freebsd.go
+
+          # Build
+          go build -o "cloudflared-$VERSION" "./cmd/cloudflared"
+
+          # Verify
+          if ! ./"cloudflared-$VERSION" --version >/dev/null 2>&1; then
+            echo "Build verification failed"
+            exit 1
+          fi
+
+          # Copy to workspace
+          cp "cloudflared-$VERSION" "$GITHUB_WORKSPACE/"
+          echo "version=$VERSION" >> $GITHUB_ENV
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflared-binary-${{ env.version }}
+          path: cloudflared-${{ env.version }}
+          retention-days: 30
+
+      - name: Update VERSION.txt
+        run: |
+          echo "${{ env.version }}" > VERSION.txt
+
+      - name: Commit version update
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add VERSION.txt
+          git commit -m "Update to cloudflared ${{ env.version }}" || true
+          git push || true
+
+  package:
+    needs: [check-release, build]
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cloudflared-binary-${{ needs.check-release.outputs.new_version }}
+
+      - name: Create OPNsense package
+        run: |
+          VERSION="${{ needs.check-release.outputs.new_version }}"
+          echo "Creating OPNsense package for cloudflared $VERSION"
+
+          # Make binary executable
+          chmod +x "cloudflared-$VERSION"
+
+          # Create package structure (simplified for now)
+          mkdir -p package/usr/local/bin
+          cp "cloudflared-$VERSION" package/usr/local/bin/cloudflared
+          chmod 755 package/usr/local/bin/cloudflared
+
+          # Create package metadata
+          cat > package/+MANIFEST << EOF
+name: cloudflared
+version: ${VERSION#v}
+origin: net/cloudflared
+comment: Cloudflare Tunnel client
+desc: Cloudflare Tunnel client (cloudflared) is a tunneling daemon that proxies traffic from the Cloudflare network to your origins.
+maintainer: your-email@example.com
+www: https://github.com/cloudflare/cloudflared
+prefix: /usr/local
+EOF
+
+          # Create tarball
+          tar czf "cloudflared-${VERSION#v}.txz" -C package .
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opnsense-package-${{ needs.check-release.outputs.new_version }}
+          path: cloudflared-${{ needs.check-release.outputs.new_version }}.txz
+          retention-days: 30
+
+  release:
+    needs: [check-release, package]
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download package
+        uses: actions/download-artifact@v4
+        with:
+          name: opnsense-package-${{ needs.check-release.outputs.new_version }}
+
+      - name: Create GitHub release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.check-release.outputs.new_version }}
+          release_name: Cloudflared ${{ needs.check-release.outputs.new_version }}
+          body: |
+            Automated build of cloudflared ${{ needs.check-release.outputs.new_version }} for OPNsense/FreeBSD.
+
+            ## Installation
+
+            Download the `.txz` package and install with:
+            ```bash
+            pkg add cloudflared-${{ needs.check-release.outputs.new_version }}.txz
+            ```
+
+            Or add to your OPNsense package repository.
+          draft: false
+          prerelease: false
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: cloudflared-${{ needs.check-release.outputs.new_version }}.txz
+          asset_name: cloudflared-${{ needs.check-release.outputs.new_version }}.txz
+          asset_content_type: application/x-tar
