@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="/var/log/github-runner-setup.log"
 
 # Configuration - CHANGE THESE
-GITHUB_REPO="${GITHUB_REPO:-your-org/your-repo}"  # e.g., "yourusername/cloudflared-opnsense"
+GITHUB_REPO="${GITHUB_REPO:-agoodkind/cloudflared-opnsense}"  # GitHub repository for this project
 RUNNER_TOKEN="${GITHUB_RUNNER_TOKEN:-}"  # Get from GitHub Settings > Actions > Runners
 
 # Log function
