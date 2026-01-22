@@ -1,6 +1,8 @@
-# Cloudflared Automated Build & Update System
+# Cloudflared OPNsense Plugin
 
-This directory contains scripts for automated cloudflared building and distribution to OPNsense routers.
+[![GitHub Actions Build Status](https://github.com/agoodkind/cloudflared-opnsense/actions/workflows/build-cloudflared.yml/badge.svg)](https://github.com/agoodkind/cloudflared-opnsense/actions)
+
+This repository contains an OPNsense plugin for Cloudflare Tunnel (cloudflared) with automated building and distribution.
 
 ## Architecture Overview
 
@@ -69,9 +71,9 @@ This would require:
 
 **As root on freebsd-dev:**
 ```bash
-# Copy setup script
-scp agoodkind@router:~/Sites/configs/router/cloudflared/setup-freebsd-dev.sh /tmp/
-cd /tmp
+# Clone the repository
+git clone https://github.com/agoodkind/cloudflared-opnsense.git /tmp/cloudflared-opnsense
+cd /tmp/cloudflared-opnsense
 
 # Configure publish location (optional, defaults shown)
 export CLOUDFLARED_PUBLISH_DIR="/var/www/cloudflared"
@@ -87,9 +89,9 @@ sudo ./setup-freebsd-dev.sh
 
 **As root on OPNsense router:**
 ```bash
-# Copy setup script
-scp agoodkind@freebsd-dev:~/Sites/configs/router/cloudflared/setup-router-updates.sh /tmp/
-cd /tmp
+# Clone the repository
+git clone https://github.com/agoodkind/cloudflared-opnsense.git /tmp/cloudflared-opnsense
+cd /tmp/cloudflared-opnsense
 
 # Configure manifest URL
 export CLOUDFLARED_MANIFEST_URL="http://freebsd-dev.local/cloudflared/manifest.json"
@@ -102,9 +104,12 @@ sudo ./setup-router-updates.sh
 
 **As user with sudo on router:**
 ```bash
+# Clone repository and set up
+git clone https://github.com/agoodkind/cloudflared-opnsense.git ~/cloudflared-opnsense
+cd ~/cloudflared-opnsense
+
 # Set token securely (required once)
 export CLOUDFLARED_TOKEN="your-actual-token-here"
-cd ~/Sites/configs/router/cloudflared
 ./cloudflared-token.sh
 
 # Install RC script
