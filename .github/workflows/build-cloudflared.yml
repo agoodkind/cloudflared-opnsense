@@ -1,144 +1,68 @@
-name: Build Cloudflared for OPNsense
+name: Create Release from Built Binaries
 
 on:
-  schedule:
-    # Check for new releases every 6 hours
-    - cron: '0 */6 * * *'
-  workflow_dispatch: # Allow manual trigger
   push:
     paths:
-      - '.github/workflows/build-cloudflared.yml'
+      - 'binaries/cloudflared-*'
+      - 'VERSION.txt'
 
 jobs:
-  check-release:
-    runs-on: ubuntu-latest
-    outputs:
-      new_version: ${{ steps.check.outputs.new_version }}
-      should_build: ${{ steps.check.outputs.should_build }}
-
-    steps:
-      - name: Check for new cloudflared release
-        id: check
-        run: |
-          # Get latest release from GitHub API
-          LATEST=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | jq -r '.tag_name')
-
-          # Get current version from previous build (if exists)
-          CURRENT=$(curl -s https://api.github.com/repos/${{ github.repository }}/contents/VERSION.txt 2>/dev/null | jq -r '.content // empty' | base64 -d 2>/dev/null || echo "")
-          echo "current=$CURRENT" >> $GITHUB_OUTPUT
-
-          echo "latest=$LATEST" >> $GITHUB_OUTPUT
-          echo "current=$CURRENT" >> $GITHUB_OUTPUT
-
-          if [ "$LATEST" != "$CURRENT" ]; then
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "new_version=$LATEST" >> $GITHUB_OUTPUT
-            echo "New version found: $LATEST (current: $CURRENT)"
-          else
-            echo "should_build=false" >> $GITHUB_OUTPUT
-            echo "Already at latest version: $LATEST"
-          fi
-
-  trigger-build:
-    needs: check-release
-    if: needs.check-release.outputs.should_build == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H freebsd-dev.local >> ~/.ssh/known_hosts
-
-      - name: Trigger remote build on freebsd-dev
-        run: |
-          VERSION="${{ needs.check-release.outputs.new_version }}"
-          echo "Triggering build of cloudflared $VERSION on freebsd-dev"
-
-          # SSH into freebsd-dev and run build
-          ssh -o StrictHostKeyChecking=no freebsd-dev << EOF
-            # Build cloudflared on FreeBSD
-            export VERSION="$VERSION"
-            echo "Building cloudflared \$VERSION on \$(hostname)"
-
-            # Create build directory
-            BUILD_DIR="/tmp/cloudflared-build-\$VERSION"
-            rm -rf "\$BUILD_DIR"
-            mkdir -p "\$BUILD_DIR"
-            cd "\$BUILD_DIR"
-
-            # Clone and checkout specific version
-            git clone --depth 1 --branch "\$VERSION" https://github.com/cloudflare/cloudflared.git .
-
-            # Apply FreeBSD build fixes
-            sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix.go
-            sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix_test.go
-            cp diagnostic/system_collector_linux.go diagnostic/system_collector_freebsd.go
-            sed -i "" "s/linux/freebsd/" diagnostic/system_collector_freebsd.go
-
-            # Build
-            export PATH="/usr/local/go/bin:\$PATH"
-            go build -o "cloudflared-\$VERSION" "./cmd/cloudflared"
-
-            # Verify
-            if ! "./cloudflared-\$VERSION" --version >/dev/null 2>&1; then
-              echo "Build verification failed"
-              exit 1
-            fi
-
-            echo "Build successful: \$BUILD_DIR/cloudflared-\$VERSION"
-
-            # Copy to a web-accessible location (if configured)
-            if [ -d "/var/www/cloudflared" ]; then
-              cp "cloudflared-\$VERSION" "/var/www/cloudflared/"
-              echo "Published to /var/www/cloudflared/cloudflared-\$VERSION"
-            fi
-          EOF
-
-      - name: Update VERSION.txt
-        run: |
-          echo "${{ needs.check-release.outputs.new_version }}" > VERSION.txt
-
-      - name: Commit version update
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add VERSION.txt
-          git commit -m "Update to cloudflared ${{ needs.check-release.outputs.new_version }}" || true
-          git push || true
-
   create-release:
-    needs: [check-release, trigger-build]
-    if: needs.check-release.outputs.should_build == 'true'
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version info
+        id: version
+        run: |
+          VERSION=$(cat VERSION.txt)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Found new cloudflared build: $VERSION"
+
       - name: Create GitHub release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.check-release.outputs.new_version }}
-          release_name: Cloudflared ${{ needs.check-release.outputs.new_version }}
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Cloudflared ${{ steps.version.outputs.version }}
           body: |
-            Automated build of cloudflared ${{ needs.check-release.outputs.new_version }} for OPNsense/FreeBSD.
+            Automated build of cloudflared ${{ steps.version.outputs.version }} for FreeBSD/OPNsense.
+
+            Built on FreeBSD hardware with native FreeBSD patches applied.
 
             ## Installation
 
-            The build is available on freebsd-dev at:
-            - http://freebsd-dev.local/cloudflared/cloudflared-${{ needs.check-release.outputs.new_version }}
-
-            ## Download and Install
+            Download the binary from the assets below and install:
 
             ```bash
             # Download
-            curl -O http://freebsd-dev.local/cloudflared/cloudflared-${{ needs.check-release.outputs.new_version }}
+            curl -L -o cloudflared-${{ steps.version.outputs.version }} \
+              https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/cloudflared-${{ steps.version.outputs.version }}
 
             # Make executable and install
-            chmod +x cloudflared-${{ needs.check-release.outputs.new_version }}
-            sudo mv cloudflared-${{ needs.check-release.outputs.new_version }} /usr/local/bin/cloudflared
+            chmod +x cloudflared-${{ steps.version.outputs.version }}
+            sudo mv cloudflared-${{ steps.version.outputs.version }} /usr/local/bin/cloudflared
             ```
+
+            ## Verification
+
+            SHA256: `${{ steps.sha.outputs.sha256 }}`
+
+            Built automatically by freebsd-dev cron job.
           draft: false
           prerelease: false
+
+      - name: Upload binary to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: binaries/cloudflared-${{ steps.version.outputs.version }}
+          asset_name: cloudflared-${{ steps.version.outputs.version }}
+          asset_content_type: application/octet-stream

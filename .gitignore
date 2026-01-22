@@ -3,6 +3,9 @@
 cloudflared-*
 package/
 
+# Built binaries (committed to repo)
+# binaries/  # Intentionally NOT ignored - we commit built binaries
+
 # Logs
 *.log
 
