@@ -1,0 +1,26 @@
+name: Test FreeBSD Runner
+
+on:
+  workflow_dispatch: # Allow manual trigger
+  push:
+    paths:
+      - '.github/workflows/test-runner.yml'
+
+jobs:
+  test:
+    runs-on: [self-hosted, freebsd]
+
+    steps:
+      - name: Test runner
+        run: |
+          echo "Runner is working!"
+          uname -a
+          echo "FreeBSD version: $(freebsd-version)"
+          echo "Go version: $(go version 2>/dev/null || echo 'Go not installed')"
+          echo "Git version: $(git --version)"
+
+      - name: Test network
+        run: |
+          echo "Testing network connectivity..."
+          curl -I https://github.com --max-time 10 || echo "GitHub unreachable"
+          ping -c 1 8.8.8.8 || echo "DNS/Internet issue"
