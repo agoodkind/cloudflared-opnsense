@@ -70,8 +70,9 @@ fi
 
 log "Latest runner version: $RUNNER_VERSION"
 
-# Download runner
-RUNNER_ARCHIVE="actions-runner-freebsd-x64-${RUNNER_VERSION}.tar.gz"
+# Download runner - FreeBSD not officially supported, using Linux x64 which works on FreeBSD
+log "Note: Using Linux x64 runner (FreeBSD not officially supported but works)"
+RUNNER_ARCHIVE="actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
 RUNNER_URL="https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/${RUNNER_ARCHIVE}"
 
 log "Downloading runner from $RUNNER_URL"
