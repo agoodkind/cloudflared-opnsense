@@ -39,137 +39,75 @@ jobs:
             echo "Already at latest version: $LATEST"
           fi
 
-  build:
+  trigger-build:
     needs: check-release
     if: needs.check-release.outputs.should_build == 'true'
-    runs-on: [self-hosted, freebsd]
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-
-      - name: Build cloudflared
+      - name: Trigger remote build on freebsd-dev
         run: |
           VERSION="${{ needs.check-release.outputs.new_version }}"
-          echo "Building cloudflared $VERSION"
+          echo "Triggering build of cloudflared $VERSION on freebsd-dev"
 
-          # Create build directory
-          BUILD_DIR="/tmp/cloudflared-build-$VERSION"
-          rm -rf "$BUILD_DIR"
-          mkdir -p "$BUILD_DIR"
-          cd "$BUILD_DIR"
+          # SSH into freebsd-dev and run build
+          ssh -o StrictHostKeyChecking=no freebsd-dev << EOF
+            # Build cloudflared on FreeBSD
+            export VERSION="$VERSION"
+            echo "Building cloudflared \$VERSION on \$(hostname)"
 
-          # Clone and checkout specific version
-          git clone --depth 1 --branch "$VERSION" https://github.com/cloudflare/cloudflared.git .
+            # Create build directory
+            BUILD_DIR="/tmp/cloudflared-build-\$VERSION"
+            rm -rf "\$BUILD_DIR"
+            mkdir -p "\$BUILD_DIR"
+            cd "\$BUILD_DIR"
 
-          # Apply FreeBSD build fixes
-          sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix.go
-          sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix_test.go
-          cp diagnostic/system_collector_linux.go diagnostic/system_collector_freebsd.go
-          sed -i "" "s/linux/freebsd/" diagnostic/system_collector_freebsd.go
+            # Clone and checkout specific version
+            git clone --depth 1 --branch "\$VERSION" https://github.com/cloudflare/cloudflared.git .
 
-          # Build
-          go build -o "cloudflared-$VERSION" "./cmd/cloudflared"
+            # Apply FreeBSD build fixes
+            sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix.go
+            sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix_test.go
+            cp diagnostic/system_collector_linux.go diagnostic/system_collector_freebsd.go
+            sed -i "" "s/linux/freebsd/" diagnostic/system_collector_freebsd.go
 
-          # Verify
-          if ! ./"cloudflared-$VERSION" --version >/dev/null 2>&1; then
-            echo "Build verification failed"
-            exit 1
-          fi
+            # Build
+            export PATH="/usr/local/go/bin:\$PATH"
+            go build -o "cloudflared-\$VERSION" "./cmd/cloudflared"
 
-          # Copy to workspace
-          cp "cloudflared-$VERSION" "$GITHUB_WORKSPACE/"
-          echo "version=$VERSION" >> $GITHUB_ENV
+            # Verify
+            if ! "./cloudflared-\$VERSION" --version >/dev/null 2>&1; then
+              echo "Build verification failed"
+              exit 1
+            fi
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloudflared-binary-${{ env.version }}
-          path: cloudflared-${{ env.version }}
-          retention-days: 30
+            echo "Build successful: \$BUILD_DIR/cloudflared-\$VERSION"
+
+            # Copy to a web-accessible location (if configured)
+            if [ -d "/var/www/cloudflared" ]; then
+              cp "cloudflared-\$VERSION" "/var/www/cloudflared/"
+              echo "Published to /var/www/cloudflared/cloudflared-\$VERSION"
+            fi
+          EOF
 
       - name: Update VERSION.txt
         run: |
-          echo "${{ env.version }}" > VERSION.txt
+          echo "${{ needs.check-release.outputs.new_version }}" > VERSION.txt
 
       - name: Commit version update
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add VERSION.txt
-          git commit -m "Update to cloudflared ${{ env.version }}" || true
+          git commit -m "Update to cloudflared ${{ needs.check-release.outputs.new_version }}" || true
           git push || true
 
-  package:
-    needs: [check-release, build]
+  create-release:
+    needs: [check-release, trigger-build]
     if: needs.check-release.outputs.should_build == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: cloudflared-binary-${{ needs.check-release.outputs.new_version }}
-
-      - name: Create OPNsense package
-        run: |
-          VERSION="${{ needs.check-release.outputs.new_version }}"
-          echo "Creating OPNsense package for cloudflared $VERSION"
-
-          # Make binary executable
-          chmod +x "cloudflared-$VERSION"
-
-          # Create package structure (simplified for now)
-          mkdir -p package/usr/local/bin
-          cp "cloudflared-$VERSION" package/usr/local/bin/cloudflared
-          chmod 755 package/usr/local/bin/cloudflared
-
-          # Create package metadata
-          cat > package/+MANIFEST << EOF
-name: cloudflared
-version: ${VERSION#v}
-origin: net/cloudflared
-comment: Cloudflare Tunnel client
-desc: Cloudflare Tunnel client (cloudflared) is a tunneling daemon that proxies traffic from the Cloudflare network to your origins.
-maintainer: your-email@example.com
-www: https://github.com/cloudflare/cloudflared
-prefix: /usr/local
-EOF
-
-          # Create tarball
-          tar czf "cloudflared-${VERSION#v}.txz" -C package .
-
-      - name: Upload package artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: opnsense-package-${{ needs.check-release.outputs.new_version }}
-          path: cloudflared-${{ needs.check-release.outputs.new_version }}.txz
-          retention-days: 30
-
-  release:
-    needs: [check-release, package]
-    if: needs.check-release.outputs.should_build == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download package
-        uses: actions/download-artifact@v4
-        with:
-          name: opnsense-package-${{ needs.check-release.outputs.new_version }}
-
       - name: Create GitHub release
         uses: actions/create-release@v1
         env:
@@ -182,21 +120,18 @@ EOF
 
             ## Installation
 
-            Download the `.txz` package and install with:
-            ```bash
-            pkg add cloudflared-${{ needs.check-release.outputs.new_version }}.txz
-            ```
+            The build is available on freebsd-dev at:
+            - http://freebsd-dev.local/cloudflared/cloudflared-${{ needs.check-release.outputs.new_version }}
 
-            Or add to your OPNsense package repository.
+            ## Download and Install
+
+            ```bash
+            # Download
+            curl -O http://freebsd-dev.local/cloudflared/cloudflared-${{ needs.check-release.outputs.new_version }}
+
+            # Make executable and install
+            chmod +x cloudflared-${{ needs.check-release.outputs.new_version }}
+            sudo mv cloudflared-${{ needs.check-release.outputs.new_version }} /usr/local/bin/cloudflared
+            ```
           draft: false
           prerelease: false
-
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: cloudflared-${{ needs.check-release.outputs.new_version }}.txz
-          asset_name: cloudflared-${{ needs.check-release.outputs.new_version }}.txz
-          asset_content_type: application/x-tar
