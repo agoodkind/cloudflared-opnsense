@@ -3,8 +3,9 @@ name: Create Release from Built Binaries
 on:
   push:
     paths:
-      - 'binaries/cloudflared-*'
-      - 'VERSION.txt'
+      - "binaries/cloudflared-*"
+      - "VERSION.txt"
+  workflow_dispatch:
 
 jobs:
   create-release:
@@ -24,7 +25,7 @@ jobs:
           echo "Found new cloudflared build: $VERSION"
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: Cloudflared ${{ steps.version.outputs.version }}
