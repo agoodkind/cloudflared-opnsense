@@ -6,25 +6,18 @@ This repository contains an OPNsense plugin for Cloudflare Tunnel (cloudflared) 
 
 ## Architecture Overview
 
-### Publish/Download Model (Current Implementation)
-- **Build Host**: `root@freebsd-dev` - Builds and publishes to HTTP endpoint
-- **Download Location**: HTTP-accessible directory (e.g., `/var/www/cloudflared`)
-- **Router Updates**: Automatic checking and downloading every 30 minutes
-- **Security**: SHA256 checksum verification, secure token storage
-- **No SSH Required**: Router pulls updates, no direct access needed
+### Automated FreeBSD Builds (Current Implementation)
+- **Build Host**: `root@freebsd-dev` runs cron job every 30 minutes
+- **Version Monitoring**: Checks Cloudflare releases via GitHub API
+- **Native Compilation**: Builds cloudflared on FreeBSD with platform-specific patches
+- **Deploy Key**: Uses SSH deploy key to push binaries to this repository
+- **GitHub Releases**: Automatic creation of releases with downloadable binaries
 
-### Future: OPNsense Plugin
-For better integration, consider creating an OPNsense plugin that:
-- Provides GUI configuration for cloudflared tunnels
-- Integrates with OPNsense's package management
-- Handles automatic updates through the plugin system
-- Provides service status and monitoring in the web interface
-
-This would require:
-1. Creating plugin package structure
-2. MVC controllers for tunnel management
-3. XML models for configuration
-4. Integration with OPNsense's service management
+### OPNsense Plugin
+- **MVC Architecture**: Full OPNsense plugin with web interface
+- **Configuration Management**: GUI for tunnel configuration and token management
+- **Service Integration**: Proper FreeBSD rc.d integration
+- **Auto-Updates**: Downloads and installs new versions from GitHub releases
 
 ## Installation Summary
 
@@ -67,44 +60,41 @@ This would require:
 
 ## Setup Instructions
 
-### 1. Build & Publish System (freebsd-dev)
+### 1. GitHub Deploy Key (REQUIRED FIRST)
 
-**As root on freebsd-dev:**
-```bash
-# Clone the repository
-git clone https://github.com/agoodkind/cloudflared-opnsense.git /tmp/cloudflared-opnsense
-cd /tmp/cloudflared-opnsense
+**Add this public key to GitHub deploy keys:**
 
-# Configure publish location (optional, defaults shown)
-export CLOUDFLARED_PUBLISH_DIR="/var/www/cloudflared"
-export CLOUDFLARED_BASE_URL="http://freebsd-dev.local/cloudflared"
-
-# Run setup
-sudo ./setup-freebsd-dev.sh
+```
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQXjLxt9dKQ1KBbW6JUzlIEv67/kM4mOb/UTj7SbixL cloudflared-deploy@freebsd-dev
 ```
 
-**Configure web server** to serve the publish directory at the base URL.
+**Steps:**
+1. Go to: https://github.com/agoodkind/cloudflared-opnsense/settings/keys
+2. Click "Add deploy key"
+3. Title: `freebsd-dev cloudflared builds`
+4. Paste the key above
+5. ✅ Check "Allow write access"
+6. Click "Add key"
 
-### 2. Router Auto-Update System
+### 2. Automated Build System (Already Configured)
 
-**As root on OPNsense router:**
+**freebsd-dev is already set up with:**
+- ✅ SSH deploy key generated and configured
+- ✅ Build script installed at `/usr/local/bin/cloudflared-build-deploy.sh`
+- ✅ Cron job running every 30 minutes
+- ✅ Log file at `/var/log/cloudflared-build-deploy.log`
+
+**To verify:**
 ```bash
-# Clone the repository
-git clone https://github.com/agoodkind/cloudflared-opnsense.git /tmp/cloudflared-opnsense
-cd /tmp/cloudflared-opnsense
-
-# Configure manifest URL
-export CLOUDFLARED_MANIFEST_URL="http://freebsd-dev.local/cloudflared/manifest.json"
-
-# Run setup
-sudo ./setup-router-updates.sh
+ssh freebsd-dev 'tail -20 /var/log/cloudflared-build-deploy.log'
+ssh freebsd-dev 'crontab -l | grep cloudflared'
 ```
 
-### 3. One-Time Manual Setup (on router)
+### 3. OPNsense Router Setup
 
 **As user with sudo on router:**
 ```bash
-# Clone repository and set up
+# Clone repository
 git clone https://github.com/agoodkind/cloudflared-opnsense.git ~/cloudflared-opnsense
 cd ~/cloudflared-opnsense
 
@@ -118,6 +108,17 @@ export CLOUDFLARED_TOKEN="your-actual-token-here"
 # Enable service
 sudo sysrc cloudflared_enable=YES
 sudo service cloudflared start
+```
+
+### 4. Download Latest Build
+
+**Once automated builds start (after deploy key is added):**
+```bash
+# Check GitHub releases for latest version
+# Download and install
+curl -L -o cloudflared https://github.com/agoodkind/cloudflared-opnsense/releases/latest/download/cloudflared-2026.1.1
+chmod +x cloudflared
+sudo mv cloudflared /usr/local/bin/
 ```
 
 ```bash
