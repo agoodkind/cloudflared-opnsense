@@ -8,7 +8,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG_FILE="/var/log/github-runner-setup.log"
+LOG_FILE="/tmp/github-runner-setup.log"
 
 # Configuration - CHANGE THESE
 GITHUB_REPO="${GITHUB_REPO:-agoodkind/cloudflared-opnsense}"  # GitHub repository for this project
