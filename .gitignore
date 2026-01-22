@@ -1,0 +1,29 @@
+# Build artifacts
+*.txz
+cloudflared-*
+package/
+
+# Logs
+*.log
+
+# GitHub Actions runner
+actions-runner/
+
+# Temporary files
+*.tmp
+*.bak
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
