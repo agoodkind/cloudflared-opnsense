@@ -232,8 +232,8 @@ publish_to_cloudflare_pages() {
     cp "$PKG_REPO_DIR/meta.conf" repo/
     cp "$PKG_REPO_DIR/packagesite.yaml" repo/
     
-    # Copy static index page
-    cp "$REPO_DIR/templates/index.html" index.html
+    # Copy static index page from main branch
+    git show main:templates/index.html > index.html
     
     # Commit and push
     git add -A
