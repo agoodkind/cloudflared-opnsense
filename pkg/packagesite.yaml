@@ -1,3 +1,30 @@
-{"name":"os-cloudflared","origin":"opnsense/os-cloudflared","version":"1.0_3","comment":"Cloudflare Tunnel client for OPNsense","maintainer":"github.com/agoodkind","www":"https://github.com/agoodkind/cloudflared-opnsense","abi":"FreeBSD:14:amd64","arch":"freebsd:14:x86:64","prefix":"/usr/local","sum":"be10f3809e91aa71da24bf87c7b06269ce15943a5762198aca386a206a0d180c","flatsize":40348121,"path":"All/os-cloudflared-1.0_3.pkg","repopath":"All/os-cloudflared-1.0_3.pkg","licenses":["BSD2CLAUSE"],"pkgsize":17686405,"desc":"Cloudflare Tunnel client for OPNsense\n\nThis plugin provides a web interface for managing Cloudflare Tunnel (cloudflared)\non OPNsense firewall/router systems. Configure tunnels, manage tokens, and monitor\nconnections through the OPNsense GUI.\n\nWWW: https://github.com/agoodkind/cloudflared-opnsense","categories":["net"],"shlibs_required":["libc.so.7","libthr.so.3"],"annotations":{"FreeBSD_version":"1403000"}}
-{"name":"os-cloudflared","origin":"opnsense/os-cloudflared","version":"1.0_2","comment":"Cloudflare Tunnel client for OPNsense","maintainer":"github.com/agoodkind","www":"https://github.com/agoodkind/cloudflared-opnsense","abi":"FreeBSD:14:amd64","arch":"freebsd:14:x86:64","prefix":"/usr/local","sum":"829343921b0fc9e4036028a457e3b7aaf1d3ff80b277a84ae67ef4bb41928bf8","flatsize":40348121,"path":"All/os-cloudflared-1.0_2.pkg","repopath":"All/os-cloudflared-1.0_2.pkg","licenses":["BSD2CLAUSE"],"pkgsize":17685447,"desc":"Cloudflare Tunnel client for OPNsense\n\nThis plugin provides a web interface for managing Cloudflare Tunnel (cloudflared)\non OPNsense firewall/router systems. Configure tunnels, manage tokens, and monitor\nconnections through the OPNsense GUI.\n\nWWW: https://github.com/agoodkind/cloudflared-opnsense","deps":{"cloudflared":{"origin":"net/cloudflared","version":"2026.1.1"}},"categories":["net"],"shlibs_required":["libc.so.7","libthr.so.3"],"annotations":{"FreeBSD_version":"1403000"}}
-{"name":"os-cloudflared","origin":"opnsense/os-cloudflared","version":"1.0_1","comment":"Cloudflare Tunnel client for OPNsense","maintainer":"github.com/agoodkind","www":"https://github.com/agoodkind/cloudflared-opnsense","abi":"FreeBSD:14:amd64","arch":"freebsd:14:x86:64","prefix":"/usr/local","sum":"2fe3b5da4a4aeb70d99f1ed2ffab34206379c2d8f2449962eb2d1ed3cdd84d27","flatsize":40348121,"path":"All/os-cloudflared-1.0_1.pkg","repopath":"All/os-cloudflared-1.0_1.pkg","licenses":["BSD2CLAUSE"],"pkgsize":17685361,"desc":"Cloudflare Tunnel client for OPNsense\n\nThis plugin provides a web interface for managing Cloudflare Tunnel (cloudflared)\non OPNsense firewall/router systems. Configure tunnels, manage tokens, and monitor\nconnections through the OPNsense GUI.\n\nWWW: https://github.com/agoodkind/cloudflared-opnsense","deps":{"cloudflared":{"origin":"net/cloudflared","version":"2026.1.1"}},"categories":["net"],"shlibs_required":["libc.so.7","libthr.so.3"],"annotations":{"FreeBSD_version":"1403000"}}
+{
+  "name": "os-cloudflared",
+  "origin": "opnsense/os-cloudflared",
+  "version": "2026.1.1_1",
+  "comment": "Cloudflare Tunnel client for OPNsense",
+  "maintainer": "github.com/agoodkind",
+  "www": "https://github.com/agoodkind/cloudflared-opnsense",
+  "abi": "FreeBSD:14:amd64",
+  "arch": "freebsd:14:x86:64",
+  "prefix": "/usr/local",
+  "sum": "c6d42bf7eea4cc29df6e548e06bfe3df344644e817168f866d7a5015c7978f18",
+  "flatsize": 40348121,
+  "path": "https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-freebsd-r1/os-cloudflared-2026.1.1_1.pkg",
+  "repopath": "https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-freebsd-r1/os-cloudflared-2026.1.1_1.pkg",
+  "licenses": [
+    "BSD2CLAUSE"
+  ],
+  "pkgsize": 17686511,
+  "desc": "Cloudflare Tunnel client for OPNsense\n\nThis plugin provides a web interface for managing Cloudflare Tunnel (cloudflared)\non OPNsense firewall/router systems. Configure tunnels, manage tokens, and monitor\nconnections through the OPNsense GUI.\n\nWWW: https://github.com/agoodkind/cloudflared-opnsense",
+  "categories": [
+    "net"
+  ],
+  "shlibs_required": [
+    "libc.so.7",
+    "libthr.so.3"
+  ],
+  "annotations": {
+    "FreeBSD_version": "1403000"
+  }
+}
