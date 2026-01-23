@@ -188,15 +188,21 @@ update_pkg_repository() {
     pkg repo .
     
     # pkg repo creates packagesite.pkg and data.pkg in compressed format
-    # We need to update the URLs inside to point to GitHub instead of local files
+    # packagesite.yaml is actually JSON format, need to update paths to GitHub
     
-    # Extract packagesite, update URLs, recompress
+    # Extract and modify packagesite
     tar -xzf packagesite.pkg
-    sed -i "" "s|file:///.*/All|https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}|g" packagesite.yaml
+    
+    # Update all package paths to point to GitHub (packagesite is JSON, not YAML)
+    sed -i "" \
+        -e "s|\"path\":\"All/${pkg_name}.pkg\"|\"path\":\"${github_url}\"|g" \
+        -e "s|\"repopath\":\"All/${pkg_name}.pkg\"|\"repopath\":\"${github_url}\"|g" \
+        packagesite.yaml
+    
+    # Recompress
     tar -czf packagesite.pkg packagesite.yaml
     
-    # Keep uncompressed yaml for modern pkg clients
-    # (packagesite.yaml stays)
+    # Keep uncompressed for modern pkg clients
     
     log "Repository metadata updated with GitHub URL"
 }
