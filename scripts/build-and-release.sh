@@ -187,17 +187,18 @@ update_pkg_repository() {
     # Use pkg repo to generate proper repository files
     pkg repo .
     
-    # pkg repo creates packagesite.pkg and data.pkg in compressed format
-    # packagesite.yaml is actually JSON format, need to update paths to GitHub
+    # pkg repo creates packagesite.pkg - it's JSON despite .yaml extension
+    # Update package paths to point to GitHub instead of local files
     
-    # Extract and modify packagesite
+    # Extract packagesite
     tar -xzf packagesite.pkg
     
-    # Update all package paths to point to GitHub (packagesite is JSON, not YAML)
-    sed -i "" \
-        -e "s|\"path\":\"All/${pkg_name}.pkg\"|\"path\":\"${github_url}\"|g" \
-        -e "s|\"repopath\":\"All/${pkg_name}.pkg\"|\"repopath\":\"${github_url}\"|g" \
-        packagesite.yaml
+    # Use jq to update paths in the JSON
+    jq --arg url "$github_url" '
+        .[] |= if .path then .path = $url else . end |
+        .[] |= if .repopath then .repopath = $url else . end
+    ' packagesite.yaml > packagesite.tmp
+    mv packagesite.tmp packagesite.yaml
     
     # Recompress
     tar -czf packagesite.pkg packagesite.yaml
