@@ -146,10 +146,10 @@ create_plugin_package() {
 create_github_release() {
     local version=$1
     local revision=$2
-    local pkg_version="${PLUGIN_VERSION}_${revision}"
+    local pkg_version="${version}_${revision}"
     local pkg_name="${PLUGIN_NAME}-${pkg_version}"
     local pkg_file="$PKG_REPO_DIR/All/${pkg_name}.pkg"
-    local tag="${version}-r${revision}"
+    local tag="${version}-freebsd-r${revision}"
     
     log "Creating GitHub release for cloudflared $version (revision $revision)"
     
