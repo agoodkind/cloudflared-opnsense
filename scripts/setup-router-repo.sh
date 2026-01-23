@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 # Configure OPNsense router to use custom cloudflared pkg repository
 # Run this script on the OPNsense router after freebsd-dev is set up.
@@ -17,7 +17,7 @@ error() {
 }
 
 check_root() {
-    if [[ $EUID -ne 0 ]]; then
+    if [ "$(id -u)" -ne 0 ]; then
         error "This script must be run as root"
     fi
 }
@@ -77,14 +77,17 @@ main() {
     create_repo_config
     update_pkg_database
     
-    read -p "Install os-cloudflared plugin now? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        install_plugin
-    else
-        log "Skipping plugin installation"
-        log "To install later, run: pkg install os-cloudflared"
-    fi
+    printf "Install os-cloudflared plugin now? [y/N] "
+    read -r reply
+    case "$reply" in
+        [Yy]*)
+            install_plugin
+            ;;
+        *)
+            log "Skipping plugin installation"
+            log "To install later, run: pkg install os-cloudflared"
+            ;;
+    esac
     
     log "Setup complete!"
     log ""
