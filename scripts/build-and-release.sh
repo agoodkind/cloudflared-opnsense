@@ -283,6 +283,12 @@ EOF
 }
 
 main() {
+    local force=false
+    if [[ "${1:-}" == "--force" ]] || [[ "${1:-}" == "-f" ]]; then
+        force=true
+        log "Force rebuild requested"
+    fi
+    
     log "Checking for new cloudflared releases"
     
     local latest_version
@@ -293,8 +299,9 @@ main() {
     last_built=$(get_last_built_version)
     log "Last built version: ${last_built:-none}"
     
-    if [[ "$latest_version" == "$last_built" ]]; then
+    if [[ "$latest_version" == "$last_built" ]] && [[ "$force" == "false" ]]; then
         log "Already at latest version, nothing to do"
+        log "Use --force to rebuild with incremented revision"
         exit 0
     fi
     
