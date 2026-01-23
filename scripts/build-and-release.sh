@@ -6,6 +6,7 @@ set -euo pipefail
 # update the local pkg repository, and create GitHub releases.
 
 STATE_FILE="/var/db/cloudflared-build-state"
+REVISION_FILE="/var/db/cloudflared-revision"
 WORK_DIR="/var/tmp/cloudflared-build"
 PKG_REPO_DIR="/var/tmp/cloudflared-repo"
 PLUGIN_NAME="os-cloudflared"
@@ -34,8 +35,27 @@ get_last_built_version() {
     fi
 }
 
+get_revision_number() {
+    local version=$1
+    local last_version
+    last_version=$(get_last_built_version)
+    
+    if [[ "$version" == "$last_version" ]] && [[ -f "$REVISION_FILE" ]]; then
+        # Same version, increment revision
+        local rev
+        rev=$(cat "$REVISION_FILE")
+        echo $((rev + 1))
+    else
+        # New version, reset revision
+        echo 1
+    fi
+}
+
 save_built_version() {
-    echo "$1" > "$STATE_FILE"
+    local version=$1
+    local revision=$2
+    echo "$version" > "$STATE_FILE"
+    echo "$revision" > "$REVISION_FILE"
 }
 
 build_cloudflared() {
@@ -75,7 +95,9 @@ build_cloudflared() {
 
 create_plugin_package() {
     local cf_version=$1
-    local pkg_name="${PLUGIN_NAME}-${PLUGIN_VERSION}"
+    local revision=$2
+    local pkg_version="${PLUGIN_VERSION}_${revision}"
+    local pkg_name="${PLUGIN_NAME}-${pkg_version}"
     local staging_dir="$WORK_DIR/staging"
     
     log "Creating plugin package $pkg_name"
@@ -105,7 +127,7 @@ create_plugin_package() {
     cp pkg-plist "$staging_dir/"
     
     # Generate manifest with version
-    sed "s/{{version}}/$PLUGIN_VERSION/g; s/{{cloudflared_version}}/$cf_version/g" \
+    sed "s/{{version}}/$pkg_version/g; s/{{cloudflared_version}}/$cf_version/g" \
         +MANIFEST > "$staging_dir/+MANIFEST"
     
     # Create package
@@ -124,34 +146,40 @@ create_plugin_package() {
 
 create_github_release() {
     local version=$1
-    local pkg_name="${PLUGIN_NAME}-${PLUGIN_VERSION}"
+    local revision=$2
+    local pkg_version="${PLUGIN_VERSION}_${revision}"
+    local pkg_name="${PLUGIN_NAME}-${pkg_version}"
     local pkg_file="$PKG_REPO_DIR/All/${pkg_name}.pkg"
+    local tag="${version}-r${revision}"
     
-    log "Creating GitHub release for cloudflared $version"
+    log "Creating GitHub release for cloudflared $version (revision $revision)"
     
     cd "$REPO_DIR"
     
     # Check if release already exists
-    if gh release view "$version" >/dev/null 2>&1; then
-        log "Release $version already exists, deleting and recreating"
-        gh release delete "$version" -y
-        git push --delete origin "$version" 2>/dev/null || true
-        git tag -d "$version" 2>/dev/null || true
+    if gh release view "$tag" >/dev/null 2>&1; then
+        log "Release $tag already exists, deleting and recreating"
+        gh release delete "$tag" -y
+        git push --delete origin "$tag" 2>/dev/null || true
+        git tag -d "$tag" 2>/dev/null || true
     fi
     
-    # Create release with gh CLI (using cloudflare's version as tag)
-    gh release create "$version" \
-        --title "Cloudflared ${version} for OPNsense" \
-        --notes "OPNsense plugin package (os-cloudflared ${PLUGIN_VERSION}) with cloudflared ${version}" \
+    # Create release with gh CLI
+    gh release create "$tag" \
+        --title "Cloudflared ${version} for OPNsense (r${revision})" \
+        --notes "OPNsense plugin package (os-cloudflared ${pkg_version}) with cloudflared ${version}" \
         "$pkg_file"
     
-    log "GitHub release created: $version"
+    log "GitHub release created: $tag"
 }
 
 update_pkg_repository() {
     local cf_version=$1
-    local pkg_name="${PLUGIN_NAME}-${PLUGIN_VERSION}"
-    local github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${cf_version}/${pkg_name}.pkg"
+    local revision=$2
+    local pkg_version="${PLUGIN_VERSION}_${revision}"
+    local pkg_name="${PLUGIN_NAME}-${pkg_version}"
+    local tag="${cf_version}-r${revision}"
+    local github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${pkg_name}.pkg"
     
     log "Updating pkg repository metadata"
     
@@ -168,9 +196,9 @@ EOF
     cat > packagesite.yaml <<EOF
 ${pkg_name}:
   name: ${pkg_name}
-  version: ${PLUGIN_VERSION}
-  origin: opnsense/${pkg_name}
-  comment: Cloudflare Tunnel client for OPNsense
+  version: ${pkg_version}
+  origin: opnsense/${PLUGIN_NAME}
+  comment: Cloudflare Tunnel client for OPNsense (cloudflared ${cf_version})
   arch: FreeBSD:14:amd64
   www: https://github.com/agoodkind/cloudflared-opnsense
   maintainer: github.com/agoodkind
@@ -271,14 +299,19 @@ main() {
     fi
     
     log "New version detected, starting build"
-    build_cloudflared "$latest_version"
-    create_plugin_package "$latest_version"
-    create_github_release "$latest_version"
-    update_pkg_repository "$latest_version"
-    publish_to_cloudflare_pages
-    save_built_version "$latest_version"
     
-    log "Build and release complete"
+    local revision
+    revision=$(get_revision_number "$latest_version")
+    log "Building revision $revision"
+    
+    build_cloudflared "$latest_version"
+    create_plugin_package "$latest_version" "$revision"
+    create_github_release "$latest_version" "$revision"
+    update_pkg_repository "$latest_version" "$revision"
+    publish_to_cloudflare_pages
+    save_built_version "$latest_version" "$revision"
+    
+    log "Build and release complete (${latest_version}-r${revision})"
 }
 
 main "$@"
