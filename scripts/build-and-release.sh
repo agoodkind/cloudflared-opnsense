@@ -129,7 +129,8 @@ create_plugin_package() {
     sed "s/{{version}}/$pkg_version/g; s/{{cloudflared_version}}/$cf_version/g" \
         +MANIFEST > "$staging_dir/+MANIFEST"
     
-    # Create package
+    # Create package - clean up old packages first to avoid stale entries
+    rm -rf "$PKG_REPO_DIR"
     mkdir -p "$PKG_REPO_DIR/All"
     cd "$staging_dir"
     log "Creating package with pkg create"
@@ -187,23 +188,27 @@ update_pkg_repository() {
     # Use pkg repo to generate proper repository files
     pkg repo .
     
-    # pkg repo creates packagesite.pkg - it's JSON despite .yaml extension
+    # pkg repo creates packagesite.pkg containing packagesite.yaml
+    # Format: NDJSON (one compact JSON object per line per package)
     # Update package paths to point to GitHub instead of local files
     
     # Extract packagesite
     tar -xzf packagesite.pkg
     
-    # Use jq to update paths in the JSON (single object per line)
-    jq --arg url "$github_url" '
-        if .path then .path = $url else . end |
-        if .repopath then .repopath = $url else . end
+    # Update paths in JSON - use slurp to handle NDJSON input, output compact per line
+    # Only update the specific version we just built
+    jq -c --arg url "$github_url" --arg ver "$pkg_version" '
+        if .version == $ver then
+            .path = $url | .repopath = $url
+        else
+            .
+        end
     ' packagesite.yaml > packagesite.tmp
     mv packagesite.tmp packagesite.yaml
     
-    # Recompress
-    tar -czf packagesite.pkg packagesite.yaml
-    
-    # Keep uncompressed for modern pkg clients
+    # Recompress with zstd (pkg repo uses zstd, not gzip)
+    rm -f packagesite.pkg
+    tar --zstd -cf packagesite.pkg packagesite.yaml
     
     log "Repository metadata updated with GitHub URL"
 }
@@ -217,12 +222,10 @@ publish_to_cloudflare_pages() {
     rm -rf pkg
     mkdir -p pkg
     
-    # Copy metadata files
+    # Copy metadata files (packagesite.pkg is already zstd-compressed)
     cp "$PKG_REPO_DIR/meta.conf" pkg/
     cp "$PKG_REPO_DIR/packagesite.yaml" pkg/
-    
-    # Create compressed packagesite for pkg compatibility
-    tar -czf pkg/packagesite.pkg -C "$PKG_REPO_DIR" packagesite.yaml
+    cp "$PKG_REPO_DIR/packagesite.pkg" pkg/
     
     # Commit and push
     git add pkg/
