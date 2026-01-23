@@ -94,9 +94,14 @@ create_plugin_package() {
     mkdir -p "$staging_dir/usr/local/bin"
     install -m 755 "$WORK_DIR/cloudflared/cloudflared" "$staging_dir/usr/local/bin/"
     
+    # Create required directories
+    mkdir -p "$staging_dir/usr/local/etc/cloudflared"
+    mkdir -p "$staging_dir/var/log/cloudflared"
+    
     # Copy package metadata to staging
     cp +POST_INSTALL "$staging_dir/"
     cp +POST_DEINSTALL "$staging_dir/"
+    cp +DESC "$staging_dir/"
     cp pkg-plist "$staging_dir/"
     
     # Generate manifest with version
