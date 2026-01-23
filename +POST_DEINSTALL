@@ -1,0 +1,26 @@
+#!/bin/sh
+# Post-deinstallation script for os-cloudflared
+
+log() {
+    echo "[os-cloudflared] $*"
+}
+
+log "Removing cloudflared plugin from OPNsense"
+
+# Stop service if running
+if [ -x /usr/local/etc/rc.d/cloudflared ]; then
+    /usr/local/etc/rc.d/cloudflared stop 2>/dev/null || true
+fi
+
+# Remove generated config files but keep user data
+rm -f /usr/local/etc/cloudflared/config.yml
+
+# Restart configd
+if [ -x /usr/local/etc/rc.d/configd ]; then
+    /usr/local/etc/rc.d/configd restart
+fi
+
+log "Deinstallation complete"
+log "Note: Config data preserved in /usr/local/etc/cloudflared/"
+
+exit 0

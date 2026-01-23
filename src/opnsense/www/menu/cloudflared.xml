@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<menu>
+    <Services>
+        <Cloudflared cssClass="fa fa-cloud" url="/ui/cloudflared" order="100">
+            <Overview url="/ui/cloudflared" order="1"/>
+            <Settings url="/ui/cloudflared/settings" order="2"/>
+        </Cloudflared>
+    </Services>
+</menu>
