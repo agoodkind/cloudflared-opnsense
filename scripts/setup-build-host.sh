@@ -93,32 +93,21 @@ verify_git_config() {
 }
 
 setup_gh_auth() {
-    log "Setting up GitHub CLI authentication"
+    log "Checking GitHub CLI authentication"
     
     if gh auth status >/dev/null 2>&1; then
         log "GitHub CLI already authenticated"
         return 0
     fi
     
+    log "WARNING: GitHub CLI not authenticated"
+    log "GitHub releases will be skipped until authenticated"
     log ""
-    log "GitHub CLI needs authentication for creating releases"
-    log "Run this command and follow the prompts:"
+    log "To authenticate, run manually:"
     log "  gh auth login"
     log ""
-    log "Choose:"
-    log "  - GitHub.com"
-    log "  - HTTPS"
-    log "  - Authenticate with: Login with a web browser"
-    log ""
-    read -p "Press Enter to continue with authentication..."
-    
-    gh auth login
-    
-    if gh auth status >/dev/null 2>&1; then
-        log "GitHub CLI authenticated successfully"
-    else
-        error "GitHub CLI authentication failed"
-    fi
+    log "Or use a token:"
+    log "  echo 'your_token' | gh auth login --with-token"
 }
 
 main() {
