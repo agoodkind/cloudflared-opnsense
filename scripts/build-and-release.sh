@@ -232,6 +232,9 @@ publish_to_cloudflare_pages() {
     cp "$PKG_REPO_DIR/meta.conf" repo/
     cp "$PKG_REPO_DIR/packagesite.yaml" repo/
     
+    # Create compressed packagesite for pkg compatibility
+    tar -czf repo/packagesite.pkg -C "$PKG_REPO_DIR" packagesite.yaml
+    
     # Copy static index page from main branch
     git show main:templates/index.html > index.html
     
