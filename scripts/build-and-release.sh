@@ -38,29 +38,31 @@ save_built_version() {
     echo "$1" > "$STATE_FILE"
 }
 
-build_cloudflared() {
+download_cloudflared() {
     local version=$1
-    log "Building cloudflared $version"
+    log "Downloading cloudflared $version"
     
     mkdir -p "$WORK_DIR"
     cd "$WORK_DIR"
     
-    if [[ -d cloudflared ]]; then
-        rm -rf cloudflared
+    local pkg_url="https://github.com/cloudflare/cloudflared/releases/download/${version}/cloudflared-amd64.pkg"
+    
+    log "Downloading from: $pkg_url"
+    curl -L -o cloudflared-upstream.pkg "$pkg_url"
+    
+    if [[ ! -f cloudflared-upstream.pkg ]]; then
+        error "Download failed: cloudflared-upstream.pkg not found"
     fi
     
-    log "Cloning cloudflared repository at tag $version"
-    git clone --depth 1 --branch "$version" https://github.com/cloudflare/cloudflared.git
+    # Extract binary from pkg
+    log "Extracting cloudflared binary from package"
+    tar -xf cloudflared-upstream.pkg
     
-    cd cloudflared
-    log "Building with Go"
-    gmake cloudflared
-    
-    if [[ ! -f cloudflared ]]; then
-        error "Build failed: cloudflared binary not found"
+    if [[ ! -f usr/local/bin/cloudflared ]]; then
+        error "Extraction failed: cloudflared binary not found in package"
     fi
     
-    log "Build complete: $(file cloudflared)"
+    log "Download complete: $(file usr/local/bin/cloudflared)"
 }
 
 create_plugin_package() {
@@ -84,7 +86,7 @@ create_plugin_package() {
     
     # Install cloudflared binary
     mkdir -p "$staging_dir/usr/local/bin"
-    install -m 755 "$WORK_DIR/cloudflared/cloudflared" "$staging_dir/usr/local/bin/"
+    install -m 755 "$WORK_DIR/usr/local/bin/cloudflared" "$staging_dir/usr/local/bin/"
     
     # Generate manifest with version
     sed "s/{{version}}/$PLUGIN_VERSION/g; s/{{cloudflared_version}}/$cf_version/g" \
@@ -244,7 +246,7 @@ main() {
     fi
     
     log "New version detected, starting build"
-    build_cloudflared "$latest_version"
+    download_cloudflared "$latest_version"
     create_plugin_package "$latest_version"
     create_github_release "$latest_version"
     update_pkg_repository "$latest_version"
