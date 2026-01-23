@@ -233,38 +233,8 @@ publish_to_cloudflare_pages() {
     cp "$PKG_REPO_DIR/meta.conf" repo/
     cp "$PKG_REPO_DIR/packagesite.yaml" repo/
     
-    # Create index page
-    cat > index.html <<EOF
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Cloudflared Package Repository</title>
-    <style>
-        body { font-family: system-ui; max-width: 800px; margin: 50px auto; padding: 20px; }
-        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
-    </style>
-</head>
-<body>
-    <h1>Cloudflared Package Repository</h1>
-    <p>FreeBSD package repository for cloudflared OPNsense plugin.</p>
-    
-    <h2>Configuration</h2>
-    <p>Add to <code>/usr/local/etc/pkg/repos/cloudflared.conf</code>:</p>
-    <pre>cloudflared: {
-  url: "https://pkg.goodkind.io/repo",
-  enabled: yes,
-  priority: 10
-}</pre>
-    
-    <h2>Installation</h2>
-    <pre>pkg update
-pkg install os-cloudflared</pre>
-    
-    <p><small>Packages hosted on <a href="https://github.com/agoodkind/cloudflared-opnsense/releases">GitHub Releases</a></small></p>
-</body>
-</html>
-EOF
+    # Copy static index page
+    cp "$REPO_DIR/templates/index.html" index.html
     
     # Commit and push
     git add -A
