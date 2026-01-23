@@ -185,10 +185,9 @@ update_pkg_repository() {
     
     cd "$PKG_REPO_DIR"
     
-    # Create metadata that references GitHub
+    # Create metadata that references GitHub (v2 format)
     cat > meta.conf <<EOF
-version = 1;
-packing_format = "txz";
+version = 2;
 manifests = "packagesite.yaml";
 EOF
     
