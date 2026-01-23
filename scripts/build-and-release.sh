@@ -131,6 +131,13 @@ create_github_release() {
     
     cd "$REPO_DIR"
     
+    # Check if release already exists
+    if gh release view "$version" >/dev/null 2>&1; then
+        log "Release $version already exists, deleting and recreating"
+        gh release delete "$version" -y
+        git push --delete origin "$version" 2>/dev/null || true
+    fi
+    
     # Create release with gh CLI (using cloudflare's version as tag)
     gh release create "$version" \
         --title "Cloudflared ${version} for OPNsense" \
