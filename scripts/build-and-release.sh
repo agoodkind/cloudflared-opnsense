@@ -208,7 +208,6 @@ update_pkg_repository() {
     
     log "Repository metadata updated with GitHub URL"
 }
-}
 
 publish_to_cloudflare_pages() {
     log "Publishing repository metadata to Cloudflare Pages"
