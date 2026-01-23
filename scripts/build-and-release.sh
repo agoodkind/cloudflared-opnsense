@@ -83,23 +83,28 @@ create_plugin_package() {
     mkdir -p "$staging_dir"
     cd "$REPO_DIR"
     
-    # Copy plugin files
+    # Copy plugin files to staging
     log "Copying plugin files to staging"
-    rsync -av --relative \
-        src/opnsense/ \
-        +MANIFEST \
-        +POST_INSTALL \
-        +POST_DEINSTALL \
-        "$staging_dir/"
+    
+    # Copy OPNsense plugin files
+    mkdir -p "$staging_dir/usr/local"
+    rsync -av src/opnsense/ "$staging_dir/usr/local/opnsense/"
     
     # Install cloudflared binary
     mkdir -p "$staging_dir/usr/local/bin"
     install -m 755 "$WORK_DIR/cloudflared/cloudflared" "$staging_dir/usr/local/bin/"
     
+    # Copy package metadata to staging
+    cp +POST_INSTALL "$staging_dir/"
+    cp +POST_DEINSTALL "$staging_dir/"
+    cp pkg-plist "$staging_dir/"
+    
     # Generate manifest with version
     sed "s/{{version}}/$PLUGIN_VERSION/g; s/{{cloudflared_version}}/$cf_version/g" \
         +MANIFEST > "$staging_dir/+MANIFEST"
     
+    # Create package
+    mkdir -p "$PKG_REPO_DIR/All"
     cd "$staging_dir"
     log "Creating package with pkg create"
     pkg create -m . -r . -p pkg-plist -o "$PKG_REPO_DIR/All/"
