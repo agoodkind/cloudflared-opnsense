@@ -188,22 +188,19 @@ update_pkg_repository() {
     # Use pkg repo to generate proper repository files
     pkg repo .
     
-    # Extract the compressed packagesite to modify URLs
+    # Extract and modify compressed packagesite
     tar -xzf packagesite.pkg
-    
-    # Update packagesite.yaml to use GitHub URL instead of local path
     sed -i "" "s|file:///.*/All/${pkg_name}.pkg|${github_url}|g" packagesite.yaml
-    
-    # Recompress packagesite with updated URLs
     tar -czf packagesite.pkg packagesite.yaml
-    rm packagesite.yaml
     
-    # Also update data.pkg if it contains references
+    # Keep packagesite.yaml for deployment (don't delete)
+    
+    # Also update data.pkg
     tar -xzf data.pkg 2>/dev/null || true
-    if [ -f packagesite.yaml ]; then
-        sed -i "" "s|file:///.*/All/${pkg_name}.pkg|${github_url}|g" packagesite.yaml
-        tar -czf data.pkg packagesite.yaml
-        rm packagesite.yaml
+    if [ -f data.yaml ]; then
+        sed -i "" "s|file:///.*/All/${pkg_name}.pkg|${github_url}|g" data.yaml
+        tar -czf data.pkg data.yaml
+        rm data.yaml
     fi
     
     log "Repository metadata updated with GitHub URL"
