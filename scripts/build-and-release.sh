@@ -10,7 +10,6 @@ REVISION_FILE="/var/db/cloudflared-revision"
 WORK_DIR="/var/tmp/cloudflared-build"
 PKG_REPO_DIR="/var/tmp/cloudflared-repo"
 PLUGIN_NAME="os-cloudflared"
-PLUGIN_VERSION="1.0"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 log() {
@@ -96,11 +95,11 @@ build_cloudflared() {
 create_plugin_package() {
     local cf_version=$1
     local revision=$2
-    local pkg_version="${PLUGIN_VERSION}_${revision}"
+    local pkg_version="${cf_version}_${revision}"
     local pkg_name="${PLUGIN_NAME}-${pkg_version}"
     local staging_dir="$WORK_DIR/staging"
     
-    log "Creating plugin package $pkg_name"
+    log "Creating plugin package $pkg_name (cloudflared $cf_version, FreeBSD revision $revision)"
     
     mkdir -p "$staging_dir"
     cd "$REPO_DIR"
@@ -166,8 +165,8 @@ create_github_release() {
     
     # Create release with gh CLI
     gh release create "$tag" \
-        --title "Cloudflared ${version} for OPNsense (r${revision})" \
-        --notes "OPNsense plugin package (os-cloudflared ${pkg_version}) with cloudflared ${version}" \
+        --title "Cloudflared ${version} for FreeBSD (revision ${revision})" \
+        --notes "OPNsense plugin for cloudflared ${version}, FreeBSD package revision ${revision}" \
         "$pkg_file"
     
     log "GitHub release created: $tag"
@@ -176,9 +175,9 @@ create_github_release() {
 update_pkg_repository() {
     local cf_version=$1
     local revision=$2
-    local pkg_version="${PLUGIN_VERSION}_${revision}"
+    local pkg_version="${cf_version}_${revision}"
     local pkg_name="${PLUGIN_NAME}-${pkg_version}"
-    local tag="${cf_version}-r${revision}"
+    local tag="${pkg_version}"
     local github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${pkg_name}.pkg"
     
     log "Updating pkg repository metadata"
@@ -267,7 +266,7 @@ main() {
     publish_to_cloudflare_pages
     save_built_version "$latest_version" "$revision"
     
-    log "Build and release complete (${latest_version}-r${revision})"
+    log "Build and release complete (${latest_version}_${revision})"
 }
 
 main "$@"
