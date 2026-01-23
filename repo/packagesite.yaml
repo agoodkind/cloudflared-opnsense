@@ -7,6 +7,6 @@ os-cloudflared-1.0_1:
   www: https://github.com/agoodkind/cloudflared-opnsense
   maintainer: github.com/agoodkind
   prefix: /usr/local
-  sum: 809db44ecd9f825160fcd1578eeddc5931a24b56fc29867ac6edc567bee1d581
-  flatsize: 17685123
+  sum: 7b8f3b3855457f0b2ce69c81668bd07520e8bb4b72a58fed9bd44343bf317ca5
+  flatsize: 17685451
   path: https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-r1/os-cloudflared-1.0_1.pkg
