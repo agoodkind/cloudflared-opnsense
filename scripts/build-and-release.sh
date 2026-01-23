@@ -226,9 +226,6 @@ publish_to_cloudflare_pages() {
     # Create compressed packagesite for pkg compatibility
     tar -czf pkg/packagesite.pkg -C "$PKG_REPO_DIR" packagesite.yaml
     
-    # Copy index page
-    cp templates/index.html pkg/
-    
     # Commit and push
     git add pkg/
     if git diff --cached --quiet; then
