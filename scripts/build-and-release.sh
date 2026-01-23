@@ -177,7 +177,7 @@ update_pkg_repository() {
     local revision=$2
     local pkg_version="${cf_version}_${revision}"
     local pkg_name="${PLUGIN_NAME}-${pkg_version}"
-    local tag="${pkg_version}"
+    local tag="${cf_version}-freebsd-r${revision}"
     local github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${pkg_name}.pkg"
     
     log "Updating pkg repository metadata"
