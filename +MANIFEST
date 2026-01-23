@@ -5,11 +5,5 @@ comment: Cloudflare Tunnel client for OPNsense
 maintainer: github.com/agoodkind
 www: https://github.com/agoodkind/cloudflared-opnsense
 prefix: /usr/local
-deps: {
-  cloudflared: {
-    origin: net/cloudflared,
-    version: "{{cloudflared_version}}"
-  }
-}
 categories: [net]
 licenses: [BSD2CLAUSE]
