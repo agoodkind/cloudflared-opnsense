@@ -215,41 +215,29 @@ publish_to_cloudflare_pages() {
     
     cd "$REPO_DIR"
     
-    # Store current branch
-    local current_branch
-    current_branch=$(git rev-parse --abbrev-ref HEAD)
+    # Create pkg directory in main branch
+    rm -rf pkg
+    mkdir -p pkg
     
-    # Switch to pkg-repo branch
-    if git show-ref --verify --quiet refs/heads/pkg-repo; then
-        git checkout pkg-repo
-    else
-        git checkout --orphan pkg-repo
-        git rm -rf . 2>/dev/null || true
-    fi
-    
-    # Copy only metadata files (not the large .pkg)
-    mkdir -p repo
-    cp "$PKG_REPO_DIR/meta.conf" repo/
-    cp "$PKG_REPO_DIR/packagesite.yaml" repo/
+    # Copy metadata files
+    cp "$PKG_REPO_DIR/meta.conf" pkg/
+    cp "$PKG_REPO_DIR/packagesite.yaml" pkg/
     
     # Create compressed packagesite for pkg compatibility
-    tar -czf repo/packagesite.pkg -C "$PKG_REPO_DIR" packagesite.yaml
+    tar -czf pkg/packagesite.pkg -C "$PKG_REPO_DIR" packagesite.yaml
     
-    # Copy static index page from main branch
-    git show main:templates/index.html > index.html
+    # Copy index page
+    cp templates/index.html pkg/
     
     # Commit and push
-    git add -A
+    git add pkg/
     if git diff --cached --quiet; then
         log "No changes to publish"
     else
-        git commit -m "Update pkg repository metadata - $(date +'%Y-%m-%d %H:%M:%S')"
-        git push -u origin pkg-repo
-        log "Pushed to pkg-repo branch - Cloudflare Pages will auto-deploy"
+        git commit -m "Update pkg repository"
+        git push origin main
+        log "Pushed to main - Cloudflare Pages will auto-deploy"
     fi
-    
-    # Return to original branch
-    git checkout "$current_branch"
     
     log "Published metadata to Cloudflare Pages"
 }
