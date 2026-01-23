@@ -185,27 +185,11 @@ update_pkg_repository() {
     
     cd "$PKG_REPO_DIR"
     
-    # Create metadata that references GitHub (v2 format)
-    cat > meta.conf <<EOF
-version = 2;
-manifests = "packagesite.yaml";
-EOF
+    # Use pkg repo to generate proper repository files
+    pkg repo .
     
-    # Generate packagesite.yaml with GitHub URL
-    cat > packagesite.yaml <<EOF
-${pkg_name}:
-  name: ${pkg_name}
-  version: ${pkg_version}
-  origin: opnsense/${PLUGIN_NAME}
-  comment: Cloudflare Tunnel client for OPNsense (cloudflared ${cf_version})
-  arch: FreeBSD:14:amd64
-  www: https://github.com/agoodkind/cloudflared-opnsense
-  maintainer: github.com/agoodkind
-  prefix: /usr/local
-  sum: $(sha256 -q "All/${pkg_name}.pkg")
-  flatsize: $(stat -f%z "All/${pkg_name}.pkg")
-  path: ${github_url}
-EOF
+    # Update packagesite.yaml to use GitHub URL instead of local path
+    sed -i "" "s|file:///.*/All/${pkg_name}.pkg|${github_url}|g" packagesite.yaml
     
     log "Repository metadata updated with GitHub URL"
 }
