@@ -81,7 +81,7 @@ create_plugin_package() {
     log "Creating plugin package $pkg_name"
     
     mkdir -p "$staging_dir"
-    cd "$(dirname "$0")/.."
+    cd "$REPO_DIR"
     
     # Copy plugin files
     log "Copying plugin files to staging"
