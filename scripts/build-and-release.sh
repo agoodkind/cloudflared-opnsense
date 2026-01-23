@@ -126,25 +126,24 @@ create_github_release() {
     local version=$1
     local pkg_name="${PLUGIN_NAME}-${PLUGIN_VERSION}"
     local pkg_file="$PKG_REPO_DIR/All/${pkg_name}.pkg"
-    local tag="v${PLUGIN_VERSION}-cf${version}"
     
     log "Creating GitHub release for cloudflared $version"
     
     cd "$REPO_DIR"
     
-    # Create release with gh CLI
-    gh release create "$tag" \
-        --title "os-cloudflared ${PLUGIN_VERSION} (cloudflared ${version})" \
-        --notes "OPNsense plugin package for cloudflared ${version}" \
+    # Create release with gh CLI (using cloudflare's version as tag)
+    gh release create "$version" \
+        --title "Cloudflared ${version} for OPNsense" \
+        --notes "OPNsense plugin package (os-cloudflared ${PLUGIN_VERSION}) with cloudflared ${version}" \
         "$pkg_file"
     
-    log "GitHub release created: $tag"
+    log "GitHub release created: $version"
 }
 
 update_pkg_repository() {
     local cf_version=$1
     local pkg_name="${PLUGIN_NAME}-${PLUGIN_VERSION}"
-    local github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/v${PLUGIN_VERSION}-cf${cf_version}/${pkg_name}.pkg"
+    local github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${cf_version}/${pkg_name}.pkg"
     
     log "Updating pkg repository metadata"
     
