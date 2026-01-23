@@ -227,6 +227,14 @@ publish_to_cloudflare_pages() {
     cp "$PKG_REPO_DIR/packagesite.yaml" pkg/
     cp "$PKG_REPO_DIR/packagesite.pkg" pkg/
     
+    # Create _headers file for Cloudflare Pages to fix pkg Last-Modified warning
+    local build_date
+    build_date=$(date -u "+%a, %d %b %Y %H:%M:%S GMT")
+    cat > pkg/_headers << EOF
+/*
+  Last-Modified: ${build_date}
+EOF
+    
     # Commit and push
     git add pkg/
     if git diff --cached --quiet; then
