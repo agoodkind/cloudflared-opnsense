@@ -193,11 +193,11 @@ update_pkg_repository() {
     # Extract packagesite
     tar -xzf packagesite.pkg
     
-    # Use jq to update paths in the JSON (it's an array of package objects)
-    jq --arg url "$github_url" 'map(
+    # Use jq to update paths in the JSON (single object per line)
+    jq --arg url "$github_url" '
         if .path then .path = $url else . end |
         if .repopath then .repopath = $url else . end
-    )' packagesite.yaml > packagesite.tmp
+    ' packagesite.yaml > packagesite.tmp
     mv packagesite.tmp packagesite.yaml
     
     # Recompress
