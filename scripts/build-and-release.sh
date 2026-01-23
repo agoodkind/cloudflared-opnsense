@@ -38,31 +38,39 @@ save_built_version() {
     echo "$1" > "$STATE_FILE"
 }
 
-download_cloudflared() {
+build_cloudflared() {
     local version=$1
-    log "Downloading cloudflared $version"
+    log "Building cloudflared $version"
     
     mkdir -p "$WORK_DIR"
     cd "$WORK_DIR"
     
-    local pkg_url="https://github.com/cloudflare/cloudflared/releases/download/${version}/cloudflared-amd64.pkg"
-    
-    log "Downloading from: $pkg_url"
-    curl -L -o cloudflared-upstream.pkg "$pkg_url"
-    
-    if [[ ! -f cloudflared-upstream.pkg ]]; then
-        error "Download failed: cloudflared-upstream.pkg not found"
+    if [[ -d cloudflared ]]; then
+        rm -rf cloudflared
     fi
     
-    # Extract binary from pkg
-    log "Extracting cloudflared binary from package"
-    tar -xf cloudflared-upstream.pkg
+    log "Cloning cloudflared repository at tag $version"
+    git clone --depth 1 --branch "$version" https://github.com/cloudflare/cloudflared.git
     
-    if [[ ! -f usr/local/bin/cloudflared ]]; then
-        error "Extraction failed: cloudflared binary not found in package"
+    cd cloudflared
+    
+    log "Applying FreeBSD patches"
+    # Add FreeBSD to build tags
+    sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix.go
+    sed -i "" "s/darwin || linux/darwin || linux || freebsd/" diagnostic/network/collector_unix_test.go
+    
+    # Create FreeBSD-specific system collector
+    cp diagnostic/system_collector_linux.go diagnostic/system_collector_freebsd.go
+    sed -i "" "s/linux/freebsd/" diagnostic/system_collector_freebsd.go
+    
+    log "Building with Go"
+    gmake cloudflared
+    
+    if [[ ! -f cloudflared ]]; then
+        error "Build failed: cloudflared binary not found"
     fi
     
-    log "Download complete: $(file usr/local/bin/cloudflared)"
+    log "Build complete: $(file cloudflared)"
 }
 
 create_plugin_package() {
@@ -86,7 +94,7 @@ create_plugin_package() {
     
     # Install cloudflared binary
     mkdir -p "$staging_dir/usr/local/bin"
-    install -m 755 "$WORK_DIR/usr/local/bin/cloudflared" "$staging_dir/usr/local/bin/"
+    install -m 755 "$WORK_DIR/cloudflared/cloudflared" "$staging_dir/usr/local/bin/"
     
     # Generate manifest with version
     sed "s/{{version}}/$PLUGIN_VERSION/g; s/{{cloudflared_version}}/$cf_version/g" \
@@ -246,7 +254,7 @@ main() {
     fi
     
     log "New version detected, starting build"
-    download_cloudflared "$latest_version"
+    build_cloudflared "$latest_version"
     create_plugin_package "$latest_version"
     create_github_release "$latest_version"
     update_pkg_repository "$latest_version"
