@@ -188,10 +188,26 @@ update_pkg_repository() {
     # Use pkg repo to generate proper repository files
     pkg repo .
     
+    # Extract the compressed packagesite to modify URLs
+    tar -xzf packagesite.pkg
+    
     # Update packagesite.yaml to use GitHub URL instead of local path
     sed -i "" "s|file:///.*/All/${pkg_name}.pkg|${github_url}|g" packagesite.yaml
     
+    # Recompress packagesite with updated URLs
+    tar -czf packagesite.pkg packagesite.yaml
+    rm packagesite.yaml
+    
+    # Also update data.pkg if it contains references
+    tar -xzf data.pkg 2>/dev/null || true
+    if [ -f packagesite.yaml ]; then
+        sed -i "" "s|file:///.*/All/${pkg_name}.pkg|${github_url}|g" packagesite.yaml
+        tar -czf data.pkg packagesite.yaml
+        rm packagesite.yaml
+    fi
+    
     log "Repository metadata updated with GitHub URL"
+}
 }
 
 publish_to_cloudflare_pages() {
