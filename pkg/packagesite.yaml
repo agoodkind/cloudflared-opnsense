@@ -1,12 +1,12 @@
-os-cloudflared-1.0_2:
-  name: os-cloudflared-1.0_2
-  version: 1.0_2
+os-cloudflared-1.0_3:
+  name: os-cloudflared-1.0_3
+  version: 1.0_3
   origin: opnsense/os-cloudflared
   comment: Cloudflare Tunnel client for OPNsense (cloudflared 2026.1.1)
   arch: FreeBSD:14:amd64
   www: https://github.com/agoodkind/cloudflared-opnsense
   maintainer: github.com/agoodkind
   prefix: /usr/local
-  sum: 2705669e3a8fdeae7f9e99eaf3e1b006900e42970991812eaa36357b67a64f99
-  flatsize: 17684815
-  path: https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-r2/os-cloudflared-1.0_2.pkg
+  sum: c35070fb4f6f5d3048bc53d66d25da4fb89f28321dc4ada47deda08f9457574a
+  flatsize: 17685284
+  path: https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-r3/os-cloudflared-1.0_3.pkg
