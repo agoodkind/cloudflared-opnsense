@@ -1,6 +1,36 @@
 {
   "name": "os-cloudflared",
   "origin": "opnsense/os-cloudflared",
+  "version": "2026.1.1_2",
+  "comment": "Cloudflare Tunnel client for OPNsense",
+  "maintainer": "github.com/agoodkind",
+  "www": "https://github.com/agoodkind/cloudflared-opnsense",
+  "abi": "FreeBSD:14:amd64",
+  "arch": "freebsd:14:x86:64",
+  "prefix": "/usr/local",
+  "sum": "760321cf2543586d2d696897bbff7a3ce63501e1963e38fdad37016fc0eddaec",
+  "flatsize": 40348121,
+  "path": "https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-freebsd-r2/os-cloudflared-2026.1.1_2.pkg",
+  "repopath": "https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-freebsd-r2/os-cloudflared-2026.1.1_2.pkg",
+  "licenses": [
+    "BSD2CLAUSE"
+  ],
+  "pkgsize": 17686505,
+  "desc": "Cloudflare Tunnel client for OPNsense\n\nThis plugin provides a web interface for managing Cloudflare Tunnel (cloudflared)\non OPNsense firewall/router systems. Configure tunnels, manage tokens, and monitor\nconnections through the OPNsense GUI.\n\nWWW: https://github.com/agoodkind/cloudflared-opnsense",
+  "categories": [
+    "net"
+  ],
+  "shlibs_required": [
+    "libc.so.7",
+    "libthr.so.3"
+  ],
+  "annotations": {
+    "FreeBSD_version": "1403000"
+  }
+}
+{
+  "name": "os-cloudflared",
+  "origin": "opnsense/os-cloudflared",
   "version": "2026.1.1_1",
   "comment": "Cloudflare Tunnel client for OPNsense",
   "maintainer": "github.com/agoodkind",
@@ -10,8 +40,8 @@
   "prefix": "/usr/local",
   "sum": "c6d42bf7eea4cc29df6e548e06bfe3df344644e817168f866d7a5015c7978f18",
   "flatsize": 40348121,
-  "path": "https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-freebsd-r1/os-cloudflared-2026.1.1_1.pkg",
-  "repopath": "https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-freebsd-r1/os-cloudflared-2026.1.1_1.pkg",
+  "path": "https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-freebsd-r2/os-cloudflared-2026.1.1_2.pkg",
+  "repopath": "https://github.com/agoodkind/cloudflared-opnsense/releases/download/2026.1.1-freebsd-r2/os-cloudflared-2026.1.1_2.pkg",
   "licenses": [
     "BSD2CLAUSE"
   ],
