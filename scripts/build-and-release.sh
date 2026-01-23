@@ -24,7 +24,7 @@ error() {
 
 get_latest_cloudflared_version() {
     curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | \
-        grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
+        grep '"tag_name":' | head -1 | sed -E 's/.*"([^"]+)".*/\1/'
 }
 
 get_last_built_version() {
