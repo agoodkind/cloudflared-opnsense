@@ -1,11 +1,7 @@
 #!/bin/sh
 # Post-installation script for os-cloudflared
 
-log() {
-    echo "[os-cloudflared] $*"
-}
-
-log "Installing cloudflared plugin for OPNsense"
+echo "[os-cloudflared] Installing cloudflared plugin for OPNsense"
 
 # Ensure required directories exist
 mkdir -p /usr/local/etc/cloudflared
@@ -15,14 +11,8 @@ mkdir -p /var/log/cloudflared
 chmod 755 /usr/local/etc/cloudflared
 chmod 755 /var/log/cloudflared
 
-# Reload configd templates
-log "Reloading OPNsense configuration templates"
-if [ -x /usr/local/etc/rc.configure_plugins ]; then
-    /usr/local/etc/rc.configure_plugins
-fi
-
-log "Installation complete"
-log "Configure cloudflared at: Services > Cloudflared"
-log "Restart configd to activate: /usr/local/etc/rc.d/configd restart"
+echo "[os-cloudflared] Installation complete"
+echo "[os-cloudflared] Configure at: Services > Cloudflared"
+echo "[os-cloudflared] Restart configd: /usr/local/etc/rc.d/configd restart"
 
 exit 0
