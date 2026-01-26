@@ -163,8 +163,8 @@ create_plugin_package() {
 
     # Copy package metadata to staging
     cp "packages/os-cloudflared/+DESC" "$staging_dir/"
-    cp "packages/os-cloudflared/+POST_INSTALL" "$staging_dir/+POST_DEINSTALL"
     cp "packages/os-cloudflared/+POST_INSTALL" "$staging_dir/"
+    cp "packages/os-cloudflared/+POST_DEINSTALL" "$staging_dir/"
     cp "packages/os-cloudflared/pkg-plist" "$staging_dir/"
 
     # Generate manifest with version
