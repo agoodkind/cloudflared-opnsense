@@ -1,0 +1,6 @@
+Cloudflare Tunnel client
+
+cloudflared is a command-line application that tunnels traffic from the Cloudflare
+network to your origin. This package provides the binary for FreeBSD systems.
+
+WWW: https://github.com/cloudflare/cloudflared

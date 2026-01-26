@@ -106,6 +106,7 @@ create_binary_package() {
     install -m 755 "$WORK_DIR/cloudflared/cloudflared" "$staging_dir/usr/local/bin/"
 
     # Copy package metadata to staging
+    cp "packages/cloudflared/+DESC" "$staging_dir/"
     cp "packages/cloudflared/+POST_INSTALL" "$staging_dir/"
     cp "packages/cloudflared/pkg-plist" "$staging_dir/"
 
@@ -161,6 +162,7 @@ create_plugin_package() {
     chmod 755 "$staging_dir/usr/local/etc/rc.d/cloudflared"
 
     # Copy package metadata to staging
+    cp "packages/os-cloudflared/+DESC" "$staging_dir/"
     cp "packages/os-cloudflared/+POST_INSTALL" "$staging_dir/+POST_DEINSTALL"
     cp "packages/os-cloudflared/+POST_INSTALL" "$staging_dir/"
     cp "packages/os-cloudflared/pkg-plist" "$staging_dir/"
