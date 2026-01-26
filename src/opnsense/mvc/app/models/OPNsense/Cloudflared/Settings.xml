@@ -11,7 +11,7 @@
             <token type="TextField">
                 <Required>N</Required>
                 <mask>/^(eyJ[A-Za-z0-9-_]+\.){2}[A-Za-z0-9-_]+$/</mask>
-                <ValidationMessage>Please enter a valid Cloudflare tunnel token</ValidationMessage>
+                <ValidationMessage>Please enter a valid Cloudflare tunnel token (starts with eyJ)</ValidationMessage>
             </token>
             <tunnel_name type="TextField">
                 <Required>N</Required>
@@ -22,8 +22,19 @@
                 <hostname type="HostnameField">
                     <Required>Y</Required>
                 </hostname>
-                <service type="TextField">
+                <enabled type="BooleanField">
+                    <default>1</default>
+                    <Required>N</Required>
+                </enabled>
+                <service type="OptionField">
                     <Required>Y</Required>
+                    <OptionValues>
+                        <http>http</http>
+                        <https>https</https>
+                        <tcp>tcp</tcp>
+                        <ssh>ssh</ssh>
+                        <rdp>rdp</rdp>
+                    </OptionValues>
                 </service>
                 <url type="TextField">
                     <Required>Y</Required>

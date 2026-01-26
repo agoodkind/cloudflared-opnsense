@@ -1,0 +1,16 @@
+#!/bin/sh
+# PROVIDE: cloudflared
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="cloudflared"
+rcvar="${name}_enable"
+command="/usr/local/bin/cloudflared"
+command_args="tunnel run --config /usr/local/etc/cloudflared/config.yml"
+pidfile="/var/run/${name}.pid"
+cloudflared_enable="${cloudflared_enable:-NO}"
+
+load_rc_config $name
+run_rc_command "$1"

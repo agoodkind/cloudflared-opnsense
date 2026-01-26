@@ -8,7 +8,7 @@ $(document).ready(function() {
     // Cloudflared status check
     function updateStatus() {
         $.ajax({
-            url: '/api/cloudflared/settings/status',
+            url: '/api/cloudflared/service/status',
             type: 'GET',
             success: function(data) {
                 if (data.status === 'running') {
@@ -20,7 +20,50 @@ $(document).ready(function() {
         });
     }
 
+    // Get version
+    function updateVersion() {
+        $.ajax({
+            url: '/api/cloudflared/service/version',
+            type: 'GET',
+            success: function(data) {
+                $('#version').text(data.version || 'Unknown');
+            }
+        });
+    }
+
+    // Service control buttons
+    $('#startBtn').click(function() {
+        $.ajax({
+            url: '/api/cloudflared/service/start',
+            type: 'POST',
+            success: function() {
+                updateStatus();
+            }
+        });
+    });
+
+    $('#stopBtn').click(function() {
+        $.ajax({
+            url: '/api/cloudflared/service/stop',
+            type: 'POST',
+            success: function() {
+                updateStatus();
+            }
+        });
+    });
+
+    $('#restartBtn').click(function() {
+        $.ajax({
+            url: '/api/cloudflared/service/restart',
+            type: 'POST',
+            success: function() {
+                updateStatus();
+            }
+        });
+    });
+
     updateStatus();
+    updateVersion();
     setInterval(updateStatus, 30000); // Update every 30 seconds
 });
 </script>

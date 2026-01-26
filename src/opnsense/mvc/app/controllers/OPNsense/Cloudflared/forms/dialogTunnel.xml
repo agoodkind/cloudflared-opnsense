@@ -1,0 +1,20 @@
+<form>
+    <field>
+        <id>tunnel.hostname</id>
+        <label>Hostname</label>
+        <type>text</type>
+        <help>Public hostname (e.g., app.example.com)</help>
+    </field>
+    <field>
+        <id>tunnel.service</id>
+        <label>Service Type</label>
+        <type>dropdown</type>
+        <help>Protocol for the origin service</help>
+    </field>
+    <field>
+        <id>tunnel.url</id>
+        <label>Origin URL</label>
+        <type>text</type>
+        <help>Local service URL (e.g., http://localhost:8080)</help>
+    </field>
+</form>
