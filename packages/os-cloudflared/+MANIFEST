@@ -8,4 +8,6 @@ prefix: /usr/local
 categories: [net]
 licenses: [BSD2CLAUSE]
 deps:
-  cloudflared: {origin: net/cloudflared, version: ">=2024.0.0"}
+  cloudflared:
+    origin: net/cloudflared
+    version: ">=2024.0.0"
