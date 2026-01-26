@@ -223,8 +223,9 @@ update_pkg_repository() {
     local plugin_pkg_name="${PLUGIN_NAME}-${pkg_version}"
     local binary_pkg_name="cloudflared-${cf_version}"
     local tag="${cf_version}-freebsd-r${revision}"
-    local plugin_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${plugin_pkg_name}.pkg"
-    local binary_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${binary_pkg_name}.pkg"
+    local repo_base_url="http://[3d06:bad:b01:240::b]:8080/All"
+    local plugin_url="${repo_base_url}/${plugin_pkg_name}.pkg"
+    local binary_url="${repo_base_url}/${binary_pkg_name}.pkg"
 
     log "Updating pkg repository metadata"
 
