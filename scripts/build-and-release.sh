@@ -282,10 +282,12 @@ publish_to_cloudflare_pages() {
     rm -rf pkg
     mkdir -p pkg
     
-    # Copy metadata files (packagesite.pkg is already zstd-compressed)
+    # Copy metadata files (packagesite.pkg and data.pkg are already compressed)
     cp "$PKG_REPO_DIR/meta.conf" pkg/
+    cp "$PKG_REPO_DIR/meta" pkg/
     cp "$PKG_REPO_DIR/packagesite.yaml" pkg/
     cp "$PKG_REPO_DIR/packagesite.pkg" pkg/
+    cp "$PKG_REPO_DIR/data.pkg" pkg/
     
     # Create _headers file for Cloudflare Pages to fix pkg Last-Modified warning
     local build_date
