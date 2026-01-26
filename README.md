@@ -1,308 +1,219 @@
 # Cloudflared OPNsense Plugin
 
-[![GitHub Actions Build Status](https://github.com/agoodkind/cloudflared-opnsense/actions/workflows/build-cloudflared.yml/badge.svg)](https://github.com/agoodkind/cloudflared-opnsense/actions)
+OPNsense plugin for Cloudflare Tunnel (cloudflared) with automated FreeBSD package building and distribution.
 
-This repository contains an OPNsense plugin for Cloudflare Tunnel (cloudflared) with automated building and distribution.
+## Architecture
 
-## Architecture Overview
+### Build System
+- **Build Host**: freebsd-dev (FreeBSD 14.3) with native Go toolchain
+- **Build Script**: `scripts/build-and-release.sh` - automated package creation
+- **Execution**: Cron job checks for new cloudflared releases every 30 minutes
+- **Version Detection**: GitHub API monitoring for upstream cloudflare/cloudflared releases
 
-### Automated FreeBSD Builds (Current Implementation)
-- **Build Host**: `root@freebsd-dev` runs cron job every 30 minutes
-- **Version Monitoring**: Checks Cloudflare releases via GitHub API
-- **Native Compilation**: Builds cloudflared on FreeBSD with platform-specific patches
-- **Deploy Key**: Uses SSH deploy key to push binaries to this repository
-- **GitHub Releases**: Automatic creation of releases with downloadable binaries
+### Package Structure
 
-### OPNsense Plugin
-- **MVC Architecture**: Full OPNsense plugin with web interface
-- **Configuration Management**: GUI for tunnel configuration and token management
-- **Service Integration**: Proper FreeBSD rc.d integration
-- **Auto-Updates**: Downloads and installs new versions from GitHub releases
+Two packages are built for each cloudflared release:
 
-## Installation Summary
+1. **cloudflared-{version}.pkg** - Binary package (~17MB)
+   - Cloudflared binary compiled for FreeBSD
+   - Installed to `/usr/local/bin/cloudflared`
+   - Independent of OPNsense plugin
 
-**Date**: January 22, 2026
-**Build Host**: root@freebsd-dev
-**Router Target**: OPNsense routers (pull-based updates)
-**Version**: Latest from cloudflared upstream (auto-updated)
-**Update Frequency**: 30 minutes (staggered between build and download)
+2. **os-cloudflared-{version}_{revision}.pkg** - OPNsense plugin package (~6KB)
+   - Web UI (MVC controllers, models, views)
+   - Configuration management
+   - Service integration scripts
+   - Requires cloudflared binary package
 
-## Components
+### Distribution
 
-### 1. Build & Publish System (freebsd-dev)
-- **Publish Script**: `cloudflared-publish.sh`
-- **Setup Script**: `setup-freebsd-dev.sh`
-- **Features**:
-  - Monitors GitHub releases for new versions
-  - Builds from official Cloudflare source with FreeBSD fixes
-  - Publishes to HTTP-accessible directory
-  - Generates manifest.json with checksums and metadata
-  - State tracking to prevent duplicate builds
+**GitHub Releases**: Packages uploaded to GitHub releases with tags like `2026.1.1-freebsd-r1`
 
-### 2. Router Auto-Update System
-- **Update Script**: `cloudflared-auto-update.sh`
-- **Setup Script**: `setup-router-updates.sh`
-- **Features**:
-  - Checks manifest for new versions every 30 minutes
-  - Downloads and verifies binaries via SHA256
-  - Automatic service restart with rollback capability
-  - Comprehensive logging and error handling
+**FreeBSD pkg Repository**:
+- Metadata served via Cloudflare Pages: `https://cloudflared-opnsense-pkg.goodkind.io`
+- Repository files: `meta.conf`, `data.pkg`, `packagesite.yaml`, `packagesite.pkg`
+- Package downloads: From freebsd-dev HTTP server or GitHub releases
 
-### 3. Manual Components
-- **Token Setup**: `cloudflared-token.sh` - Secure token storage
-- **Service Setup**: `cloudflared-rc.sh` - FreeBSD RC script
-- **Status Check**: `cloudflared-status.sh` - Service monitoring
+## Build Process
 
-### 3. Security Improvements
-- **No Plain Text Tokens**: Token must be provided via `CLOUDFLARED_TOKEN` env var
-- **Secure Token Setup**: `cloudflared-token.sh` validates and stores securely
-- **Environment-Based Config**: All sensitive data via environment variables
-
-## Setup Instructions
-
-### 1. GitHub Deploy Key (REQUIRED FIRST)
-
-**Add this public key to GitHub deploy keys:**
-
-```
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQXjLxt9dKQ1KBbW6JUzlIEv67/kM4mOb/UTj7SbixL cloudflared-deploy@freebsd-dev
-```
-
-**Steps:**
-1. Go to: https://github.com/agoodkind/cloudflared-opnsense/settings/keys
-2. Click "Add deploy key"
-3. Title: `freebsd-dev cloudflared builds`
-4. Paste the key above
-5. ✅ Check "Allow write access"
-6. Click "Add key"
-
-### 2. Automated Build System (Already Configured)
-
-**freebsd-dev is already set up with:**
-- ✅ SSH deploy key generated and configured
-- ✅ Build script installed at `/usr/local/bin/cloudflared-build-deploy.sh`
-- ✅ Cron job running every 30 minutes
-- ✅ Log file at `/var/log/cloudflared-build-deploy.log`
-
-**To verify:**
+### Version Check
 ```bash
-ssh freebsd-dev 'tail -20 /var/log/cloudflared-build-deploy.log'
-ssh freebsd-dev 'crontab -l | grep cloudflared'
+# Script checks GitHub API for latest cloudflared release
+latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | grep tag_name)
 ```
 
-### 3. OPNsense Router Setup
+### Build Flow
 
-**As user with sudo on router:**
+1. **Update Repository**
+   ```bash
+   git fetch origin main
+   git reset --hard origin/main
+   ```
+
+2. **Clone cloudflared Source**
+   ```bash
+   git clone --depth 1 --branch $version https://github.com/cloudflare/cloudflared.git
+   ```
+
+3. **Apply FreeBSD Patches**
+   - Add FreeBSD to build tags in `diagnostic/network/collector_unix.go`
+   - Create FreeBSD-specific system collector
+   - Enable FreeBSD support in diagnostics
+
+4. **Build Binary**
+   ```bash
+   gmake cloudflared  # Uses Go vendor modules
+   ```
+
+5. **Create Binary Package**
+   - Stage binary to `/usr/local/bin/cloudflared`
+   - Copy package metadata (`+MANIFEST`, `+DESC`, `+POST_INSTALL`, `pkg-plist`)
+   - Generate manifest with version substitution
+   - Run `pkg create` to build `cloudflared-{version}.pkg`
+   - Verify package size (must be > 10MB)
+
+6. **Create Plugin Package**
+   - Copy OPNsense plugin files from `src/opnsense/`
+   - Install rc.d service script
+   - Create required directories (`/usr/local/etc/cloudflared`, `/var/log/cloudflared`)
+   - Generate manifest with plugin version `{cloudflared_version}_{freebsd_revision}`
+   - Run `pkg create` to build `os-cloudflared-{version}_{revision}.pkg`
+
+7. **Upload to GitHub Releases**
+   ```bash
+   gh release create $tag \
+       --title "Cloudflared $version packages for FreeBSD (revision $revision)" \
+       cloudflared-$version.pkg \
+       os-cloudflared-${version}_${revision}.pkg
+   ```
+
+8. **Update pkg Repository Metadata**
+   - Clean old packages from `/var/tmp/cloudflared-repo/All/`
+   - Run `pkg repo .` to generate repository files
+   - Remove `data` field from `meta.conf` (enables absolute URLs)
+   - Update `packagesite.yaml` with package download URLs
+   - Compress metadata with zstd
+
+9. **Publish to Cloudflare Pages**
+   - Copy `meta.conf`, `meta`, `data.pkg`, `packagesite.yaml`, `packagesite.pkg` to `pkg/`
+   - Commit and push to main branch
+   - Cloudflare Pages auto-deploys from main branch
+
+### Revision Tracking
+
+- State file: `/var/db/cloudflared-build-state` (current cloudflared version)
+- Revision file: `/var/db/cloudflared-revision` (FreeBSD-specific revision number)
+- Same cloudflared version gets incremented FreeBSD revision on rebuild
+
+## Package Repository
+
+### Structure
+```
+/var/tmp/cloudflared-repo/
+├── All/
+│   ├── cloudflared-2026.1.1.pkg
+│   └── os-cloudflared-2026.1.1_20.pkg
+├── meta.conf          # Repository configuration
+├── meta               # Repository metadata
+├── data.pkg           # Package data archive
+├── packagesite.yaml   # Package manifest (NDJSON)
+└── packagesite.pkg    # Compressed package manifest (zstd)
+```
+
+### meta.conf Format
+```
+version = 2;
+packing_format = "tzst";
+manifests = "packagesite.yaml";
+filesite = "filesite.yaml";
+manifests_archive = "packagesite";
+filesite_archive = "filesite";
+```
+
+Note: `data` field removed to support absolute URLs in packagesite.yaml
+
+### packagesite.yaml Format
+
+NDJSON (one compact JSON object per line per package):
+```json
+{"name":"os-cloudflared","version":"2026.1.1_20","path":"http://[...]/os-cloudflared-2026.1.1_20.pkg",...}
+{"name":"cloudflared","version":"2026.1.1","path":"http://[...]/cloudflared-2026.1.1.pkg",...}
+```
+
+## Manual Build
+
 ```bash
-# Clone repository
-git clone https://github.com/agoodkind/cloudflared-opnsense.git ~/cloudflared-opnsense
-cd ~/cloudflared-opnsense
+# SSH to freebsd-dev
+ssh root@freebsd-dev
 
-# Set token securely (required once)
-export CLOUDFLARED_TOKEN="your-actual-token-here"
-./cloudflared-token.sh
+# Run build script
+cd /root/cloudflared-opnsense
+./scripts/build-and-release.sh --force
 
-# Install RC script
-./cloudflared-rc.sh
+# Check build artifacts
+ls -lh /var/tmp/cloudflared-repo/All/
 
-# Enable service
-sudo sysrc cloudflared_enable=YES
-sudo service cloudflared start
+# View repository metadata
+cat /var/tmp/cloudflared-repo/packagesite.yaml
 ```
 
-### 4. Download Latest Build
+## Files
 
-**Once automated builds start (after deploy key is added):**
-```bash
-# Check GitHub releases for latest version
-# Download and install
-curl -L -o cloudflared https://github.com/agoodkind/cloudflared-opnsense/releases/latest/download/cloudflared-2026.1.1
-chmod +x cloudflared
-sudo mv cloudflared /usr/local/bin/
-```
+### Build Scripts
+- `scripts/build-and-release.sh` - Main build and release automation
+- `scripts/setup-build-host.sh` - Initial freebsd-dev setup
+- `scripts/setup-router-repo.sh` - OPNsense repository configuration
 
-```bash
-# On router only
-export CLOUDFLARED_TOKEN="your-token-here"
-cd ~/Sites/configs/router/cloudflared
-./cloudflared-token.sh
-./cloudflared-rc.sh
-./setup-cloudflared-updates.sh  # Deprecated
-```
+### Setup Scripts
+- `setup-freebsd-dev.sh` - Configure freebsd-dev for automated builds
+- `setup-router-updates.sh` - Configure OPNsense to use package repository
 
-## Management Commands
+### Package Metadata
+- `packages/cloudflared/` - Binary package metadata (+MANIFEST, +DESC, +POST_INSTALL, pkg-plist)
+- `packages/os-cloudflared/` - Plugin package metadata (+MANIFEST, +DESC, +POST_INSTALL, +POST_DEINSTALL, pkg-plist)
 
-### Service Control
-```bash
-# Check status
-sudo service cloudflared status
+### OPNsense Plugin Source
+- `src/opnsense/mvc/` - MVC components (controllers, models, views)
+- `src/opnsense/scripts/cloudflared/` - Backend scripts (config generation, rc.d service)
+- `src/opnsense/service/conf/actions.d/` - configd actions
+- `src/opnsense/www/menu/` - Menu integration
 
-# Restart service
-sudo service cloudflared restart
+### Repository Files
+- `pkg/` - Published to Cloudflare Pages (meta.conf, data.pkg, packagesite.*)
 
-# Stop service
-sudo service cloudflared stop
+## Build Requirements
 
-# Start service
-sudo service cloudflared start
-```
-
-### Monitoring
-```bash
-# View service logs (on router)
-sudo tail -f /var/log/cloudflared.log
-
-# View publish logs (on freebsd-dev)
-sudo tail -f /var/log/cloudflared-publish.log
-
-# View update logs (on router)
-sudo tail -f /var/log/cloudflared-auto-update.log
-
-# Check version
-cloudflared --version
-
-# View metrics
-curl http://127.0.0.1:20241/metrics
-```
-
-### Manual Operations
-```bash
-# Trigger manual build/publish (on freebsd-dev)
-sudo /usr/local/bin/cloudflared-publish.sh
-
-# Trigger manual update check (on router)
-sudo /usr/local/bin/cloudflared-auto-update.sh
-
-# Check published versions (HTTP accessible)
-curl http://freebsd-dev.local/cloudflared/manifest.json
-```
-
-## Current Status
-
-✅ **Automated Builds**: Running on freebsd-dev (30-minute checks)
-✅ **Service**: Running on router (PID varies)
-✅ **Connections**: Multiple active to Cloudflare edge locations
-✅ **Encryption**: Post-quantum enabled
-✅ **Security**: No plain text tokens in repository
-✅ **Auto-deploy**: Immediate deployment on new releases
+- FreeBSD 14.3 or later
+- Go 1.21+ (`gmake` uses vendored modules)
+- Git
+- jq (JSON processing)
+- GitHub CLI (`gh`) with authentication
+- pkg tools (`pkg create`, `pkg repo`)
+- tar with zstd support
 
 ## Troubleshooting
 
-### Service Won't Start (Router)
+### Build Failures
+
+Check build logs:
 ```bash
-# Check rc.conf
-grep cloudflared /etc/rc.conf
-
-# Check token file
-sudo ls -la /usr/local/etc/cloudflared/token
-
-# Verify token validity
-sudo cat /usr/local/etc/cloudflared/token | wc -c  # Should be > 100 chars
-
-# Check logs
-sudo tail -20 /var/log/cloudflared.log
+ssh root@freebsd-dev "tail -50 /var/log/cloudflared-build.log"
 ```
 
-### Build Issues (freebsd-dev)
+Verify state files:
 ```bash
-# Check build logs
-sudo tail -50 /var/log/cloudflared-auto-build.log
-
-# Check state
-sudo cat /var/db/cloudflared-build-state.json
-
-# Manual build test
-cd /tmp && sudo CLOUDFLARED_ROUTER="agoodkind@3d06:bad:b01::1" /usr/local/bin/cloudflared-auto-build.sh
-
-# Check Go installation
-/usr/local/go/bin/go version
+ssh root@freebsd-dev "cat /var/db/cloudflared-build-state /var/db/cloudflared-revision"
 ```
 
-### Deployment Issues
+### Package Issues
+
+Verify package creation:
 ```bash
-# Test SSH connectivity to router
-ssh agoodkind@3d06:bad:b01::1 "echo 'Router reachable'"
-
-# Check router disk space
-ssh agoodkind@3d06:bad:b01::1 "df -h /usr/local/bin"
-
-# Verify router service status
-ssh agoodkind@3d06:bad:b01::1 "sudo service cloudflared status"
+ssh root@freebsd-dev "ls -lh /var/tmp/cloudflared-repo/All/"
+ssh root@freebsd-dev "pkg info -f /var/tmp/cloudflared-repo/All/os-cloudflared-*.pkg"
 ```
 
-### Network Issues
+Check repository metadata:
 ```bash
-# Test internet connectivity
-curl -I https://github.com
-
-# Test Cloudflare connectivity
-curl -I https://cloudflare.com
-
-# Check service status
-sudo service cloudflared status
+curl -s https://cloudflared-opnsense-pkg.goodkind.io/packagesite.yaml | jq .
 ```
-
-## Files in This Directory
-
-### Core Components
-- `cloudflared-token.sh` - Secure token setup (requires CLOUDFLARED_TOKEN env var)
-- `cloudflared-rc.sh` - FreeBSD RC script installation
-- `cloudflared-status.sh` - Service status and monitoring
-
-### Build & Publish System (freebsd-dev)
-- `cloudflared-publish.sh` - Automated build and publish script
-- `setup-freebsd-dev.sh` - Setup automated publishing on freebsd-dev
-
-### Router Auto-Update System
-- `cloudflared-auto-update.sh` - Automatic update checking and installation
-- `setup-router-updates.sh` - Setup auto-updates on OPNsense router
-
-### Build Scripts (Reference)
-- `cloudflared-build.sh` - Original build script (for reference)
-
-### Documentation
-- `README.md` - This documentation
-
-## Build & Update Process
-
-### Publish Phase (freebsd-dev)
-1. **Monitoring**: Checks GitHub releases every 30 minutes
-2. **Detection**: Identifies new releases via GitHub API
-3. **Build**: Clones official repo, applies FreeBSD fixes, builds with Go
-4. **Publish**: Copies binary to HTTP-accessible directory
-5. **Manifest**: Generates manifest.json with version, checksum, and download URL
-6. **State Tracking**: Records successful builds to prevent duplicates
-
-### Update Phase (Router)
-1. **Check**: Downloads manifest.json every 30 minutes (offset from publish)
-2. **Compare**: Compares latest version against currently installed
-3. **Download**: Fetches new binary if update available
-4. **Verify**: Validates SHA256 checksum and binary functionality
-5. **Install**: Stops service, replaces binary, restarts service
-6. **Rollback**: Automatic rollback to backup on failure
-
-### Key Improvements
-- **Security**: No tokens stored in plain text
-- **Speed**: Builds happen on dedicated FreeBSD system
-- **Reliability**: State tracking prevents duplicate builds
-- **Monitoring**: Comprehensive logging for debugging
-
-## Migration Notes
-
-### From Legacy to Automated
-1. Run `setup-freebsd-dev.sh` on freebsd-dev
-2. Remove legacy cron jobs on router
-3. Update monitoring scripts to check freebsd-dev logs
-
-### Token Security
-- **Old**: Plain text token in script
-- **New**: Environment variable `CLOUDFLARED_TOKEN`
-- **Never**: Store tokens in version control
-
-## Security Features
-
-- Token validation before storage
-- Proper file permissions (600, root:wheel)
-- Environment-based credential passing
-- No sensitive data in logs
-- SSH key-based deployment authentication
