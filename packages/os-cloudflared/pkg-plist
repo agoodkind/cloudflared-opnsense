@@ -1,0 +1,17 @@
+etc/rc.d/cloudflared
+opnsense/mvc/app/controllers/OPNsense/Cloudflared/Api/ServiceController.php
+opnsense/mvc/app/controllers/OPNsense/Cloudflared/Api/SettingsController.php
+opnsense/mvc/app/controllers/OPNsense/Cloudflared/IndexController.php
+opnsense/mvc/app/controllers/OPNsense/Cloudflared/forms/general.xml
+opnsense/mvc/app/controllers/OPNsense/Cloudflared/forms/dialogTunnel.xml
+opnsense/mvc/app/models/OPNsense/Cloudflared/Settings.php
+opnsense/mvc/app/models/OPNsense/Cloudflared/Settings.xml
+opnsense/mvc/app/views/OPNsense/Cloudflared/index.volt
+opnsense/mvc/app/views/OPNsense/Cloudflared/settings.volt
+opnsense/scripts/cloudflared/generate_config.py
+opnsense/scripts/cloudflared/reconfigure.sh
+opnsense/scripts/cloudflared/is_enabled.py
+opnsense/service/conf/actions.d/actions_cloudflared.conf
+opnsense/www/menu/cloudflared.xml
+@dir /usr/local/etc/cloudflared
+@dir /var/log/cloudflared

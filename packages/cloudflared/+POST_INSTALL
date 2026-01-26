@@ -1,0 +1,11 @@
+#!/bin/sh
+# Post-installation script for cloudflared binary package
+
+log() {
+    echo "[cloudflared] $*"
+}
+
+log "Cloudflare Tunnel client installed"
+log "Binary available at: /usr/local/bin/cloudflared"
+
+exit 0

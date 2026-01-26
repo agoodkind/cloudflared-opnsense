@@ -1,0 +1,11 @@
+name: os-cloudflared
+version: "{{plugin_version}}"
+origin: opnsense/os-cloudflared
+comment: OPNsense plugin for Cloudflare Tunnel
+maintainer: github.com/agoodkind
+www: https://github.com/agoodkind/cloudflared-opnsense
+prefix: /usr/local
+categories: [net]
+licenses: [BSD2CLAUSE]
+deps:
+  cloudflared: {origin: net/cloudflared, version: ">=2024.0.0"}

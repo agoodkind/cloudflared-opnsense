@@ -1,0 +1,9 @@
+name: cloudflared
+version: "{{version}}"
+origin: net/cloudflared
+comment: Cloudflare Tunnel client for FreeBSD
+maintainer: github.com/agoodkind
+www: https://github.com/cloudflare/cloudflared
+prefix: /usr/local
+categories: [net]
+licenses: [Apache-2.0]

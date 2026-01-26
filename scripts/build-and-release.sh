@@ -92,70 +92,110 @@ build_cloudflared() {
     log "Build complete: $(file cloudflared)"
 }
 
+create_binary_package() {
+    local cf_version=$1
+    local staging_dir="$WORK_DIR/binary-staging"
+
+    log "Creating binary package cloudflared-$cf_version"
+
+    mkdir -p "$staging_dir"
+    cd "$REPO_DIR"
+
+    # Install cloudflared binary
+    mkdir -p "$staging_dir/usr/local/bin"
+    install -m 755 "$WORK_DIR/cloudflared/cloudflared" "$staging_dir/usr/local/bin/"
+
+    # Copy package metadata to staging
+    cp "packages/cloudflared/+POST_INSTALL" "$staging_dir/"
+    cp "packages/cloudflared/pkg-plist" "$staging_dir/"
+
+    # Generate manifest with version
+    sed "s/{{version}}/$cf_version/g" \
+        "packages/cloudflared/+MANIFEST" > "$staging_dir/+MANIFEST"
+
+    # Create package
+    cd "$staging_dir"
+    log "Creating binary package with pkg create"
+    pkg create -m . -r . -p pkg-plist -o "$PKG_REPO_DIR/All/"
+
+    local pkg_file="$PKG_REPO_DIR/All/cloudflared-${cf_version}.pkg"
+    if [[ ! -f "$pkg_file" ]]; then
+        error "Binary package creation failed: $pkg_file not found"
+    fi
+    
+    local size
+    size=$(stat -f%z "$pkg_file" 2>/dev/null || stat -c%s "$pkg_file")
+    if [[ $size -lt 10000000 ]]; then
+        error "Binary package too small ($size bytes), build may have failed"
+    fi
+    
+    log "Binary package created: $pkg_file ($size bytes)"
+}
+
 create_plugin_package() {
     local cf_version=$1
     local revision=$2
     local pkg_version="${cf_version}_${revision}"
     local pkg_name="${PLUGIN_NAME}-${pkg_version}"
-    local staging_dir="$WORK_DIR/staging"
-    
+    local staging_dir="$WORK_DIR/plugin-staging"
+
     log "Creating plugin package $pkg_name (cloudflared $cf_version, FreeBSD revision $revision)"
-    
+
     mkdir -p "$staging_dir"
     cd "$REPO_DIR"
-    
+
     # Copy plugin files to staging
     log "Copying plugin files to staging"
-    
+
     # Copy OPNsense plugin files
     mkdir -p "$staging_dir/usr/local"
     rsync -av src/opnsense/ "$staging_dir/usr/local/opnsense/"
-    
-    # Install cloudflared binary
-    mkdir -p "$staging_dir/usr/local/bin"
-    install -m 755 "$WORK_DIR/cloudflared/cloudflared" "$staging_dir/usr/local/bin/"
-    
+
     # Create required directories
     mkdir -p "$staging_dir/usr/local/etc/cloudflared"
     mkdir -p "$staging_dir/var/log/cloudflared"
-    
+
+    # Install rc.d service script
+    mkdir -p "$staging_dir/usr/local/etc/rc.d"
+    cp "src/opnsense/scripts/cloudflared/cloudflared.rc" "$staging_dir/usr/local/etc/rc.d/cloudflared"
+    chmod 755 "$staging_dir/usr/local/etc/rc.d/cloudflared"
+
     # Copy package metadata to staging
-    cp +POST_INSTALL "$staging_dir/"
-    cp +POST_DEINSTALL "$staging_dir/"
-    cp +DESC "$staging_dir/"
-    cp pkg-plist "$staging_dir/"
-    
+    cp "packages/os-cloudflared/+POST_INSTALL" "$staging_dir/+POST_DEINSTALL"
+    cp "packages/os-cloudflared/+POST_INSTALL" "$staging_dir/"
+    cp "packages/os-cloudflared/pkg-plist" "$staging_dir/"
+
     # Generate manifest with version
-    sed "s/{{version}}/$pkg_version/g; s/{{cloudflared_version}}/$cf_version/g" \
-        +MANIFEST > "$staging_dir/+MANIFEST"
-    
-    # Create package - clean up old packages first to avoid stale entries
-    rm -rf "$PKG_REPO_DIR"
-    mkdir -p "$PKG_REPO_DIR/All"
+    sed "s/{{plugin_version}}/$pkg_version/g; s/{{version}}/$cf_version/g" \
+        "packages/os-cloudflared/+MANIFEST" > "$staging_dir/+MANIFEST"
+
+    # Create package
     cd "$staging_dir"
-    log "Creating package with pkg create"
+    log "Creating plugin package with pkg create"
     pkg create -m . -r . -p pkg-plist -o "$PKG_REPO_DIR/All/"
-    
+
     local pkg_file="$PKG_REPO_DIR/All/${pkg_name}.pkg"
     if [[ ! -f "$pkg_file" ]]; then
-        error "Package creation failed: $pkg_file not found"
+        error "Plugin package creation failed: $pkg_file not found"
     fi
-    
-    log "Package created: $pkg_file"
+
+    log "Plugin package created: $pkg_file"
 }
 
 create_github_release() {
     local version=$1
     local revision=$2
     local pkg_version="${version}_${revision}"
-    local pkg_name="${PLUGIN_NAME}-${pkg_version}"
-    local pkg_file="$PKG_REPO_DIR/All/${pkg_name}.pkg"
+    local plugin_pkg_name="${PLUGIN_NAME}-${pkg_version}"
+    local binary_pkg_name="cloudflared-${version}"
+    local plugin_pkg_file="$PKG_REPO_DIR/All/${plugin_pkg_name}.pkg"
+    local binary_pkg_file="$PKG_REPO_DIR/All/${binary_pkg_name}.pkg"
     local tag="${version}-freebsd-r${revision}"
-    
+
     log "Creating GitHub release for cloudflared $version (revision $revision)"
-    
+
     cd "$REPO_DIR"
-    
+
     # Check if release already exists
     if gh release view "$tag" >/dev/null 2>&1; then
         log "Release $tag already exists, deleting and recreating"
@@ -163,13 +203,14 @@ create_github_release() {
         git push --delete origin "$tag" 2>/dev/null || true
         git tag -d "$tag" 2>/dev/null || true
     fi
-    
-    # Create release with gh CLI
+
+    # Create release with both packages
     gh release create "$tag" \
-        --title "Cloudflared ${version} for FreeBSD (revision ${revision})" \
-        --notes "OPNsense plugin for cloudflared ${version}, FreeBSD package revision ${revision}" \
-        "$pkg_file"
-    
+        --title "Cloudflared ${version} packages for FreeBSD (revision ${revision})" \
+        --notes "Cloudflared ${version} packages for FreeBSD\n\n- cloudflared-${version}.pkg: Binary package\n- ${plugin_pkg_name}.pkg: OPNsense plugin package" \
+        "$binary_pkg_file" \
+        "$plugin_pkg_file"
+
     log "GitHub release created: $tag"
 }
 
@@ -177,40 +218,43 @@ update_pkg_repository() {
     local cf_version=$1
     local revision=$2
     local pkg_version="${cf_version}_${revision}"
-    local pkg_name="${PLUGIN_NAME}-${pkg_version}"
+    local plugin_pkg_name="${PLUGIN_NAME}-${pkg_version}"
+    local binary_pkg_name="cloudflared-${cf_version}"
     local tag="${cf_version}-freebsd-r${revision}"
-    local github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${pkg_name}.pkg"
-    
+    local plugin_github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${plugin_pkg_name}.pkg"
+    local binary_github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${binary_pkg_name}.pkg"
+
     log "Updating pkg repository metadata"
-    
+
     cd "$PKG_REPO_DIR"
-    
+
     # Use pkg repo to generate proper repository files
     pkg repo .
-    
+
     # pkg repo creates packagesite.pkg containing packagesite.yaml
     # Format: NDJSON (one compact JSON object per line per package)
     # Update package paths to point to GitHub instead of local files
-    
+
     # Extract packagesite
     tar -xzf packagesite.pkg
-    
-    # Update paths in JSON - use slurp to handle NDJSON input, output compact per line
-    # Only update the specific version we just built
-    jq -c --arg url "$github_url" --arg ver "$pkg_version" '
-        if .version == $ver then
-            .path = $url | .repopath = $url
+
+    # Update paths in JSON for both packages
+    jq -c --arg plugin_url "$plugin_github_url" --arg binary_url "$binary_github_url" --arg plugin_ver "$pkg_version" --arg binary_ver "$cf_version" '
+        if .name == "os-cloudflared" and .version == $plugin_ver then
+            .path = $plugin_url | .repopath = $plugin_url
+        elif .name == "cloudflared" and .version == $binary_ver then
+            .path = $binary_url | .repopath = $binary_url
         else
             .
         end
     ' packagesite.yaml > packagesite.tmp
     mv packagesite.tmp packagesite.yaml
-    
+
     # Recompress with zstd (pkg repo uses zstd, not gzip)
     rm -f packagesite.pkg
     tar --zstd -cf packagesite.pkg packagesite.yaml
-    
-    log "Repository metadata updated with GitHub URL"
+
+    log "Repository metadata updated with GitHub URLs"
 }
 
 publish_to_cloudflare_pages() {
@@ -255,6 +299,13 @@ main() {
         log "Force rebuild requested"
     fi
     
+    log "Updating repository"
+    cd "$REPO_DIR"
+    git fetch origin main
+    git reset --hard origin/main
+    
+    mkdir -p "$PKG_REPO_DIR/All"
+    
     log "Checking for new cloudflared releases"
     
     local latest_version
@@ -278,6 +329,7 @@ main() {
     log "Building revision $revision"
     
     build_cloudflared "$latest_version"
+    create_binary_package "$latest_version"
     create_plugin_package "$latest_version" "$revision"
     create_github_release "$latest_version" "$revision"
     update_pkg_repository "$latest_version" "$revision"
