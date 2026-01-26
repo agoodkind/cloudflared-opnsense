@@ -1,18 +1,2 @@
 #!/bin/sh
-# Post-installation script for os-cloudflared
-
-echo "[os-cloudflared] Installing cloudflared plugin for OPNsense"
-
-# Ensure required directories exist
-mkdir -p /usr/local/etc/cloudflared
-mkdir -p /var/log/cloudflared
-
-# Set proper permissions
-chmod 755 /usr/local/etc/cloudflared
-chmod 755 /var/log/cloudflared
-
-echo "[os-cloudflared] Installation complete"
-echo "[os-cloudflared] Configure at: Services > Cloudflared"
-echo "[os-cloudflared] Restart configd: /usr/local/etc/rc.d/configd restart"
-
 exit 0
