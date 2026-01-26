@@ -240,6 +240,11 @@ update_pkg_repository() {
     # Use pkg repo to generate proper repository files
     pkg repo .
 
+    # Fix meta.conf to use absolute URLs (remove data field)
+    # The data field makes pkg look for packages in /data/ subdirectory
+    # We use absolute URLs in packagesite.yaml instead
+    sed -i '' 's/^data = .*//' meta.conf
+
     # pkg repo creates packagesite.pkg containing packagesite.yaml
     # Format: NDJSON (one compact JSON object per line per package)
     # Update package paths to direct GitHub releases download URLs
