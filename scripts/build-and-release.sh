@@ -230,6 +230,11 @@ update_pkg_repository() {
 
     cd "$PKG_REPO_DIR"
 
+    # Clean up old package files so pkg repo only indexes current versions
+    # This prevents relative paths for old packages from appearing in packagesite.yaml
+    log "Cleaning old packages from repository"
+    find All/ -name '*.pkg' ! -name "${plugin_pkg_name}.pkg" ! -name "${binary_pkg_name}.pkg" -delete
+
     # Use pkg repo to generate proper repository files
     pkg repo .
 
