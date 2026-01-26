@@ -1,9 +1,0 @@
-name: os-cloudflared
-version: "{{version}}"
-origin: opnsense/os-cloudflared
-comment: Cloudflare Tunnel client for OPNsense
-maintainer: github.com/agoodkind
-www: https://github.com/agoodkind/cloudflared-opnsense
-prefix: /usr/local
-categories: [net]
-licenses: [BSD2CLAUSE]

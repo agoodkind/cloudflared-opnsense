@@ -1,7 +1,0 @@
-Cloudflare Tunnel client for OPNsense
-
-This plugin provides a web interface for managing Cloudflare Tunnel (cloudflared)
-on OPNsense firewall/router systems. Configure tunnels, manage tokens, and monitor
-connections through the OPNsense GUI.
-
-WWW: https://github.com/agoodkind/cloudflared-opnsense
