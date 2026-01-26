@@ -21,12 +21,8 @@ if [ -x /usr/local/etc/rc.configure_plugins ]; then
     /usr/local/etc/rc.configure_plugins
 fi
 
-# Restart configd to pick up new actions
-if [ -x /usr/local/etc/rc.d/configd ]; then
-    /usr/local/etc/rc.d/configd restart
-fi
-
 log "Installation complete"
 log "Configure cloudflared at: Services > Cloudflared"
+log "Restart configd to activate: /usr/local/etc/rc.d/configd restart"
 
 exit 0
