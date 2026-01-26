@@ -223,8 +223,8 @@ update_pkg_repository() {
     local plugin_pkg_name="${PLUGIN_NAME}-${pkg_version}"
     local binary_pkg_name="cloudflared-${cf_version}"
     local tag="${cf_version}-freebsd-r${revision}"
-    local plugin_github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${plugin_pkg_name}.pkg"
-    local binary_github_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${binary_pkg_name}.pkg"
+    local plugin_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${plugin_pkg_name}.pkg"
+    local binary_url="https://github.com/agoodkind/cloudflared-opnsense/releases/download/${tag}/${binary_pkg_name}.pkg"
 
     log "Updating pkg repository metadata"
 
@@ -234,37 +234,16 @@ update_pkg_repository() {
     pkg repo .
 
     # pkg repo creates packagesite.pkg containing packagesite.yaml
-    # Get direct CDN URLs by following GitHub redirects
-    # This avoids pkg having to handle the redirect chain
-    
-    log "Fetching direct CDN URLs from GitHub redirects"
-    local plugin_direct_url
-    local binary_direct_url
-    
-    # Use curl -w to get the final redirect location
-    plugin_direct_url=$(curl -s -I -L -w '%{redirect_url}' "$plugin_github_url" | tail -1)
-    binary_direct_url=$(curl -s -I -L -w '%{redirect_url}' "$binary_github_url" | tail -1)
-    
-    # Fallback to GitHub URLs if redirect extraction fails
-    if [[ -z "$plugin_direct_url" ]] || [[ "$plugin_direct_url" == "$plugin_github_url" ]]; then
-        log "Warning: Could not extract plugin direct URL, using GitHub URL"
-        plugin_direct_url="$plugin_github_url"
-    else
-        log "Plugin CDN URL: $plugin_direct_url"
-    fi
-    
-    if [[ -z "$binary_direct_url" ]] || [[ "$binary_direct_url" == "$binary_github_url" ]]; then
-        log "Warning: Could not extract binary direct URL, using GitHub URL"
-        binary_direct_url="$binary_github_url"
-    else
-        log "Binary CDN URL: $binary_direct_url"
-    fi
+    # Format: NDJSON (one compact JSON object per line per package)
+    # Update package paths to direct GitHub releases download URLs
 
     # Extract packagesite
     tar -xzf packagesite.pkg
 
-    # Update paths in JSON for both packages with direct CDN URLs
-    jq -c --arg plugin_url "$plugin_direct_url" --arg binary_url "$binary_direct_url" --arg plugin_ver "$pkg_version" --arg binary_ver "$cf_version" '
+    log "Package URLs - plugin: $plugin_url binary: $binary_url"
+
+    # Update paths in JSON for both packages
+    jq -c --arg plugin_url "$plugin_url" --arg binary_url "$binary_url" --arg plugin_ver "$pkg_version" --arg binary_ver "$cf_version" '
         if .name == "os-cloudflared" and .version == $plugin_ver then
             .path = $plugin_url | .repopath = $plugin_url
         elif .name == "cloudflared" and .version == $binary_ver then
@@ -279,7 +258,7 @@ update_pkg_repository() {
     rm -f packagesite.pkg
     tar --zstd -cf packagesite.pkg packagesite.yaml
 
-    log "Repository metadata updated with direct CDN URLs"
+    log "Repository metadata updated"
 }
 
 publish_to_cloudflare_pages() {
