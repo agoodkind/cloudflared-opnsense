@@ -241,18 +241,19 @@ update_pkg_repository() {
     local plugin_direct_url
     local binary_direct_url
     
-    plugin_direct_url=$(curl -s -I -L "$plugin_github_url" | grep -i '^location:' | tail -1 | cut -d' ' -f2 | tr -d '\r')
-    binary_direct_url=$(curl -s -I -L "$binary_github_url" | grep -i '^location:' | tail -1 | cut -d' ' -f2 | tr -d '\r')
+    # Use curl -w to get the final redirect location
+    plugin_direct_url=$(curl -s -I -L -w '%{redirect_url}' "$plugin_github_url" | tail -1)
+    binary_direct_url=$(curl -s -I -L -w '%{redirect_url}' "$binary_github_url" | tail -1)
     
     # Fallback to GitHub URLs if redirect extraction fails
-    if [[ -z "$plugin_direct_url" ]]; then
+    if [[ -z "$plugin_direct_url" ]] || [[ "$plugin_direct_url" == "$plugin_github_url" ]]; then
         log "Warning: Could not extract plugin direct URL, using GitHub URL"
         plugin_direct_url="$plugin_github_url"
     else
         log "Plugin CDN URL: $plugin_direct_url"
     fi
     
-    if [[ -z "$binary_direct_url" ]]; then
+    if [[ -z "$binary_direct_url" ]] || [[ "$binary_direct_url" == "$binary_github_url" ]]; then
         log "Warning: Could not extract binary direct URL, using GitHub URL"
         binary_direct_url="$binary_github_url"
     else
