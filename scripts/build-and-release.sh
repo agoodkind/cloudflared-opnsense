@@ -223,7 +223,7 @@ update_pkg_repository() {
     local plugin_pkg_name="${PLUGIN_NAME}-${pkg_version}"
     local binary_pkg_name="cloudflared-${cf_version}"
     local tag="${cf_version}-freebsd-r${revision}"
-    local repo_base_url="http://[3d06:bad:b01:240::b]:8080/All"
+    local repo_base_url="https://cloudflared-opnsense-pkg.goodkind.io/All"
     local plugin_url="${repo_base_url}/${plugin_pkg_name}.pkg"
     local binary_url="${repo_base_url}/${binary_pkg_name}.pkg"
 
@@ -350,7 +350,7 @@ main() {
     build_cloudflared "$latest_version"
     create_binary_package "$latest_version"
     create_plugin_package "$latest_version" "$revision"
-    create_github_release "$latest_version" "$revision"
+    create_github_release "$latest_version" "$revision" || log "WARNING: GitHub release failed, continuing..."
     update_pkg_repository "$latest_version" "$revision"
     publish_to_cloudflare_pages
     save_built_version "$latest_version" "$revision"
