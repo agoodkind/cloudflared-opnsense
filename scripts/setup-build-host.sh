@@ -43,7 +43,7 @@ setup_cloudflare_pages() {
 FreeBSD Package Repository for cloudflared-opnsense
 
 This branch is automatically updated by the build system.
-Served via Cloudflare Pages at cloudflared-opnsense.pkg.goodkind.io
+Served via Cloudflare Pages at cloudflared-opnsense-pkg.goodkind.io
 EOF
         
         git add README.txt
@@ -133,7 +133,7 @@ main() {
     log "   - Connect to Git > Select cloudflared-opnsense repo"
     log "   - Production branch: pkg-repo"
     log "   - Build settings: None (pre-built static files)"
-    log "   - Add custom domain: cloudflared-opnsense.pkg.goodkind.io"
+    log "   - Add custom domain: cloudflared-opnsense-pkg.goodkind.io"
     log "2. Run initial build: $REPO_DIR/scripts/build-and-release.sh"
     log "3. Configure routers with: scripts/setup-router-repo.sh"
     log "4. Builds will run automatically daily at 2 AM"

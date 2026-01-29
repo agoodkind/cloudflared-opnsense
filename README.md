@@ -5,7 +5,6 @@ OPNsense plugin for Cloudflare Tunnel (cloudflared) with automated FreeBSD packa
 ## Architecture
 
 ### Build System
-
 - **Build Host**: freebsd-dev (FreeBSD 14.3) with native Go toolchain
 - **Build Script**: `scripts/build-and-release.sh` - automated package creation
 - **Execution**: Cron job checks for new cloudflared releases every 30 minutes
@@ -31,15 +30,13 @@ Two packages are built for each cloudflared release:
 **GitHub Releases**: Packages uploaded to GitHub releases with tags like `2026.1.1-freebsd-r1`
 
 **FreeBSD pkg Repository**:
-
-- Metadata served via Cloudflare Pages: `https://cloudflared-opnsense.pkg.goodkind.io`
+- Metadata served via Cloudflare Pages: `https://cloudflared-opnsense-pkg.goodkind.io`
 - Repository files: `meta.conf`, `data.pkg`, `packagesite.yaml`, `packagesite.pkg`
 - Package downloads: From freebsd-dev HTTP server or GitHub releases
 
 ## Build Process
 
 ### Version Check
-
 ```bash
 # Script checks GitHub API for latest cloudflared release
 latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | grep tag_name)
@@ -48,14 +45,12 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
 ### Build Flow
 
 1. **Update Repository**
-
    ```bash
    git fetch origin main
    git reset --hard origin/main
    ```
 
 2. **Clone cloudflared Source**
-
    ```bash
    git clone --depth 1 --branch $version https://github.com/cloudflare/cloudflared.git
    ```
@@ -66,7 +61,6 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
    - Enable FreeBSD support in diagnostics
 
 4. **Build Binary**
-
    ```bash
    gmake cloudflared  # Uses Go vendor modules
    ```
@@ -86,7 +80,6 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
    - Run `pkg create` to build `os-cloudflared-{version}_{revision}.pkg`
 
 7. **Upload to GitHub Releases**
-
    ```bash
    gh release create $tag \
        --title "Cloudflared $version packages for FreeBSD (revision $revision)" \
@@ -115,7 +108,6 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
 ## Package Repository
 
 ### Structure
-
 ```
 /var/tmp/cloudflared-repo/
 ├── All/
@@ -129,7 +121,6 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
 ```
 
 ### meta.conf Format
-
 ```
 version = 2;
 packing_format = "tzst";
@@ -144,7 +135,6 @@ Note: `data` field removed to support absolute URLs in packagesite.yaml
 ### packagesite.yaml Format
 
 NDJSON (one compact JSON object per line per package):
-
 ```json
 {"name":"os-cloudflared","version":"2026.1.1_20","path":"http://[...]/os-cloudflared-2026.1.1_20.pkg",...}
 {"name":"cloudflared","version":"2026.1.1","path":"http://[...]/cloudflared-2026.1.1.pkg",...}
@@ -170,30 +160,25 @@ cat /var/tmp/cloudflared-repo/packagesite.yaml
 ## Files
 
 ### Build Scripts
-
 - `scripts/build-and-release.sh` - Main build and release automation
 - `scripts/setup-build-host.sh` - Initial freebsd-dev setup
 - `scripts/setup-router-repo.sh` - OPNsense repository configuration
 
 ### Setup Scripts
-
 - `setup-freebsd-dev.sh` - Configure freebsd-dev for automated builds
 - `setup-router-updates.sh` - Configure OPNsense to use package repository
 
 ### Package Metadata
-
 - `packages/cloudflared/` - Binary package metadata (+MANIFEST, +DESC, +POST_INSTALL, pkg-plist)
 - `packages/os-cloudflared/` - Plugin package metadata (+MANIFEST, +DESC, +POST_INSTALL, +POST_DEINSTALL, pkg-plist)
 
 ### OPNsense Plugin Source
-
 - `src/opnsense/mvc/` - MVC components (controllers, models, views)
 - `src/opnsense/scripts/cloudflared/` - Backend scripts (config generation, rc.d service)
 - `src/opnsense/service/conf/actions.d/` - configd actions
 - `src/opnsense/www/menu/` - Menu integration
 
 ### Repository Files
-
 - `pkg/` - Published to Cloudflare Pages (meta.conf, data.pkg, packagesite.*)
 
 ## Build Requirements
@@ -211,13 +196,11 @@ cat /var/tmp/cloudflared-repo/packagesite.yaml
 ### Build Failures
 
 Check build logs:
-
 ```bash
 ssh root@freebsd-dev "tail -50 /var/log/cloudflared-build.log"
 ```
 
 Verify state files:
-
 ```bash
 ssh root@freebsd-dev "cat /var/db/cloudflared-build-state /var/db/cloudflared-revision"
 ```
@@ -225,14 +208,12 @@ ssh root@freebsd-dev "cat /var/db/cloudflared-build-state /var/db/cloudflared-re
 ### Package Issues
 
 Verify package creation:
-
 ```bash
 ssh root@freebsd-dev "ls -lh /var/tmp/cloudflared-repo/All/"
 ssh root@freebsd-dev "pkg info -f /var/tmp/cloudflared-repo/All/os-cloudflared-*.pkg"
 ```
 
 Check repository metadata:
-
 ```bash
-curl -s https://cloudflared-opnsense.pkg.goodkind.io/packagesite.yaml | jq .
+curl -s https://cloudflared-opnsense-pkg.goodkind.io/packagesite.yaml | jq .
 ```

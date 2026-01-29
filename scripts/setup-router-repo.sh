@@ -5,7 +5,7 @@ set -eu
 # Run this script on the OPNsense router after freebsd-dev is set up.
 
 REPO_CONF="/usr/local/etc/pkg/repos/cloudflared.conf"
-REPO_URL="${CLOUDFLARED_REPO_URL:-https://cloudflared-opnsense.pkg.goodkind.io}"
+REPO_URL="${CLOUDFLARED_REPO_URL:-https://cloudflared-opnsense-pkg.goodkind.io}"
 
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S %Z')] $*"
