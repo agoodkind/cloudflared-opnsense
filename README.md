@@ -30,7 +30,7 @@ Two packages are built for each cloudflared release:
 **GitHub Releases**: Packages uploaded to GitHub releases with tags like `2026.1.1-freebsd-r1`
 
 **FreeBSD pkg Repository**:
-- Metadata served via Cloudflare Pages: `https://cloudflared-opnsense-pkg.goodkind.io`
+- Metadata served via Cloudflare Pages: `https://cloudflared-opnsense.pkg.goodkind.io`
 - Repository files: `meta.conf`, `data.pkg`, `packagesite.yaml`, `packagesite.pkg`
 - Package downloads: From freebsd-dev HTTP server or GitHub releases
 
@@ -215,5 +215,5 @@ ssh root@freebsd-dev "pkg info -f /var/tmp/cloudflared-repo/All/os-cloudflared-*
 
 Check repository metadata:
 ```bash
-curl -s https://cloudflared-opnsense-pkg.goodkind.io/packagesite.yaml | jq .
+curl -s https://cloudflared-opnsense.pkg.goodkind.io/packagesite.yaml | jq .
 ```
