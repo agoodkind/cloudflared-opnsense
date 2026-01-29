@@ -27,32 +27,15 @@ install_dependencies() {
     pkg install -y git go gmake rsync curl gh
 }
 
-setup_cloudflare_pages() {
-    log "Setting up Cloudflare Pages branch"
+setup_repository_backup() {
+    log "Repository metadata backup via git"
     
     cd "$REPO_DIR"
     
-    # Create pkg-repo branch if it doesn't exist
-    if ! git show-ref --verify --quiet refs/heads/pkg-repo; then
-        log "Creating pkg-repo branch"
-        git checkout --orphan pkg-repo
-        git rm -rf . 2>/dev/null || true
-        
-        # Create placeholder
-        cat > README.txt <<'EOF'
-FreeBSD Package Repository for cloudflared-opnsense
-
-This branch is automatically updated by the build system.
-Served via Cloudflare Pages at cloudflared-opnsense.pkg.goodkind.io
-EOF
-        
-        git add README.txt
-        git commit -m "Initialize pkg-repo branch"
-        git push -u origin pkg-repo
-        git checkout main
-    fi
+    # pkg/ directory is committed to main branch for backup/versioning
+    # Actual serving is done from freebsd-dev nginx at /var/tmp/cloudflared-repo/
     
-    log "pkg-repo branch ready"
+    log "Metadata served from freebsd-dev (nginx port 8080)"
 }
 
 setup_cron() {
@@ -117,26 +100,21 @@ main() {
     install_dependencies
     verify_git_config
     setup_gh_auth
-    setup_cloudflare_pages
+    setup_repository_backup
     setup_cron
     
     log "Setup complete!"
     log ""
     log "Architecture:"
     log "- GitHub Releases: Hosts .pkg files (via gh CLI)"
-    log "- Cloudflare Pages: Serves pkg repository metadata"
+    log "- freebsd-dev nginx: Serves pkg repository metadata (port 8080)"
+    log "- Domain routing: Cloudflare DNS → Traefik → nginx"
     log "- pkg downloads packages from GitHub via metadata URLs"
     log ""
     log "Next steps:"
-    log "1. Connect repo to Cloudflare Pages:"
-    log "   - Go to Workers & Pages > Create application > Pages"
-    log "   - Connect to Git > Select cloudflared-opnsense repo"
-    log "   - Production branch: pkg-repo"
-    log "   - Build settings: None (pre-built static files)"
-    log "   - Add custom domain: cloudflared-opnsense.pkg.goodkind.io"
-    log "2. Run initial build: $REPO_DIR/scripts/build-and-release.sh"
-    log "3. Configure routers with: scripts/setup-router-repo.sh"
-    log "4. Builds will run automatically daily at 2 AM"
+    log "1. Run initial build: $REPO_DIR/scripts/build-and-release.sh"
+    log "2. Configure routers with: scripts/setup-router-repo.sh"
+    log "3. Builds will run automatically daily at 2 AM"
 }
 
 main "$@"

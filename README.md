@@ -30,9 +30,10 @@ Two packages are built for each cloudflared release:
 **GitHub Releases**: Packages uploaded to GitHub releases with tags like `2026.1.1-freebsd-r1`
 
 **FreeBSD pkg Repository**:
-- Metadata served via Cloudflare Pages: `https://cloudflared-opnsense.pkg.goodkind.io`
+- Metadata served from freebsd-dev (nginx port 8080): `https://cloudflared-opnsense.pkg.goodkind.io`
+- Domain routing: Cloudflare DNS → Traefik → nginx on freebsd-dev
 - Repository files: `meta.conf`, `data.pkg`, `packagesite.yaml`, `packagesite.pkg`
-- Package downloads: From freebsd-dev HTTP server or GitHub releases
+- Package downloads: From GitHub releases
 
 ## Build Process
 
@@ -94,10 +95,10 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
    - Update `packagesite.yaml` with package download URLs
    - Compress metadata with zstd
 
-9. **Publish to Cloudflare Pages**
+9. **Publish Repository Metadata**
    - Copy `meta.conf`, `meta`, `data.pkg`, `packagesite.yaml`, `packagesite.pkg` to `pkg/`
-   - Commit and push to main branch
-   - Cloudflare Pages auto-deploys from main branch
+   - Commit and push to main branch (for backup/versioning)
+   - Metadata served directly from freebsd-dev nginx
 
 ### Revision Tracking
 
@@ -179,7 +180,8 @@ cat /var/tmp/cloudflared-repo/packagesite.yaml
 - `src/opnsense/www/menu/` - Menu integration
 
 ### Repository Files
-- `pkg/` - Published to Cloudflare Pages (meta.conf, data.pkg, packagesite.*)
+- `pkg/` - Repository metadata backup (meta.conf, data.pkg, packagesite.*)
+- Served from `/var/tmp/cloudflared-repo/` on freebsd-dev
 
 ## Build Requirements
 

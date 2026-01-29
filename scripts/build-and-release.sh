@@ -274,8 +274,8 @@ update_pkg_repository() {
     log "Repository metadata updated"
 }
 
-publish_to_cloudflare_pages() {
-    log "Publishing repository metadata to Cloudflare Pages"
+publish_repository_metadata() {
+    log "Publishing repository metadata to git (backup)"
     
     cd "$REPO_DIR"
     
@@ -290,7 +290,7 @@ publish_to_cloudflare_pages() {
     cp "$PKG_REPO_DIR/packagesite.pkg" pkg/
     cp "$PKG_REPO_DIR/data.pkg" pkg/
     
-    # Create _headers file for Cloudflare Pages to fix pkg Last-Modified warning
+    # Create _headers file for Last-Modified headers
     local build_date
     build_date=$(date -u "+%a, %d %b %Y %H:%M:%S GMT")
     cat > pkg/_headers << EOF
@@ -305,10 +305,10 @@ EOF
     else
         git commit -m "Update pkg repository"
         git push origin main
-        log "Pushed to main - Cloudflare Pages will auto-deploy"
+        log "Pushed metadata to main branch"
     fi
     
-    log "Published metadata to Cloudflare Pages"
+    log "Published metadata to git"
 }
 
 main() {
@@ -352,7 +352,7 @@ main() {
     create_plugin_package "$latest_version" "$revision"
     create_github_release "$latest_version" "$revision" || log "WARNING: GitHub release failed, continuing..."
     update_pkg_repository "$latest_version" "$revision"
-    publish_to_cloudflare_pages
+    publish_repository_metadata
     save_built_version "$latest_version" "$revision"
     
     log "Build and release complete (${latest_version}_${revision})"
