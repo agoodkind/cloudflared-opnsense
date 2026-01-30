@@ -1,21 +1,64 @@
 <model>
     <mount>//OPNsense/cloudflared</mount>
     <description>Cloudflared tunnel configuration</description>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <items>
         <general>
             <enabled type="BooleanField">
                 <default>0</default>
                 <Required>Y</Required>
             </enabled>
+            <mode type="OptionField">
+                <default>token</default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <token>Token (Cloudflare-managed)</token>
+                    <config>Config File (locally-managed)</config>
+                </OptionValues>
+            </mode>
             <token type="TextField">
                 <Required>N</Required>
                 <mask>/^(eyJ[A-Za-z0-9-_]+\.){2}[A-Za-z0-9-_]+$/</mask>
-                <ValidationMessage>Please enter a valid Cloudflare tunnel token (starts with eyJ)</ValidationMessage>
+                <ValidationMessage>
+                    Please enter a valid Cloudflare tunnel token (starts with eyJ)
+                </ValidationMessage>
             </token>
             <tunnel_name type="TextField">
                 <Required>N</Required>
             </tunnel_name>
+            <post_quantum type="BooleanField">
+                <default>1</default>
+                <Required>N</Required>
+            </post_quantum>
+            <edge_ip_version type="OptionField">
+                <default>auto</default>
+                <Required>N</Required>
+                <OptionValues>
+                    <auto>Auto</auto>
+                    <ipv4>IPv4 only</ipv4>
+                    <ipv6>IPv6 only</ipv6>
+                </OptionValues>
+            </edge_ip_version>
+            <protocol type="OptionField">
+                <default>auto</default>
+                <Required>N</Required>
+                <OptionValues>
+                    <auto>Auto</auto>
+                    <quic>QUIC</quic>
+                    <http2>HTTP/2</http2>
+                </OptionValues>
+            </protocol>
+            <loglevel type="OptionField">
+                <default>info</default>
+                <Required>N</Required>
+                <OptionValues>
+                    <debug>Debug</debug>
+                    <info>Info</info>
+                    <warn>Warn</warn>
+                    <error>Error</error>
+                    <fatal>Fatal</fatal>
+                </OptionValues>
+            </loglevel>
         </general>
         <tunnels>
             <tunnel type="ArrayField">

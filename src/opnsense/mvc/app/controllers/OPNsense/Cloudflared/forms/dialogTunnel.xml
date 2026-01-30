@@ -1,5 +1,11 @@
 <form>
     <field>
+        <id>tunnel.enabled</id>
+        <label>Enabled</label>
+        <type>checkbox</type>
+        <help>Enable this ingress rule</help>
+    </field>
+    <field>
         <id>tunnel.hostname</id>
         <label>Hostname</label>
         <type>text</type>
@@ -15,6 +21,6 @@
         <id>tunnel.url</id>
         <label>Origin URL</label>
         <type>text</type>
-        <help>Local service URL (e.g., http://localhost:8080)</help>
+        <help>Local service URL (e.g., http://localhost:8080 or tcp://localhost:22)</help>
     </field>
 </form>

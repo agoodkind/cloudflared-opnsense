@@ -2,12 +2,14 @@
 
 """
 Check if cloudflared is enabled in OPNsense configuration
+Exit code 0 = enabled, 1 = disabled
 """
 
 import sys
 import xml.etree.ElementTree as ET
 
-def is_enabled():
+
+def is_enabled() -> bool:
     """Check if cloudflared is enabled in OPNsense config"""
     try:
         tree = ET.parse('/conf/config.xml')
@@ -22,8 +24,9 @@ def is_enabled():
 
         enabled = general.findtext('enabled', '0')
         return enabled == '1'
-    except:
+    except Exception:
         return False
+
 
 if __name__ == '__main__':
     sys.exit(0 if is_enabled() else 1)

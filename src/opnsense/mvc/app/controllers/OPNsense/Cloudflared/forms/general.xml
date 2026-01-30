@@ -6,15 +6,51 @@
         <help>Enable Cloudflare Tunnel service</help>
     </field>
     <field>
+        <id>general.mode</id>
+        <label>Mode</label>
+        <type>dropdown</type>
+        <help>
+            Token mode: Tunnel configuration managed in Cloudflare dashboard.
+            Config mode: Tunnel ingress rules managed locally below.
+        </help>
+    </field>
+    <field>
         <id>general.token</id>
         <label>Tunnel Token</label>
         <type>password</type>
-        <help>Tunnel token from Cloudflare Zero Trust dashboard</help>
+        <help>
+            Tunnel token from Cloudflare Zero Trust dashboard
+            (required for token mode)
+        </help>
     </field>
     <field>
         <id>general.tunnel_name</id>
         <label>Tunnel Name</label>
         <type>text</type>
         <help>Friendly name for this tunnel (informational only)</help>
+    </field>
+    <field>
+        <id>general.post_quantum</id>
+        <label>Post-Quantum</label>
+        <type>checkbox</type>
+        <help>Enable post-quantum cryptography for tunnel connections</help>
+    </field>
+    <field>
+        <id>general.edge_ip_version</id>
+        <label>Edge IP Version</label>
+        <type>dropdown</type>
+        <help>IP version to use for connections to Cloudflare edge</help>
+    </field>
+    <field>
+        <id>general.protocol</id>
+        <label>Protocol</label>
+        <type>dropdown</type>
+        <help>Transport protocol for tunnel connections</help>
+    </field>
+    <field>
+        <id>general.loglevel</id>
+        <label>Log Level</label>
+        <type>dropdown</type>
+        <help>Logging verbosity level</help>
     </field>
 </form>

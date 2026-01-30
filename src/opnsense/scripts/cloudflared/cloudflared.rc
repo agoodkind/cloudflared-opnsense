@@ -2,15 +2,136 @@
 # PROVIDE: cloudflared
 # REQUIRE: NETWORKING
 # KEYWORD: shutdown
+#
+# Add the following lines to /etc/rc.conf to enable cloudflared:
+#   cloudflared_enable="YES"
+#
+# Optional settings (set by OPNsense plugin):
+#   cloudflared_mode="token"        # token or config
+#   cloudflared_token_file="/usr/local/etc/cloudflared/token"
+#   cloudflared_config="/usr/local/etc/cloudflared/config.yml"
+#   cloudflared_post_quantum="YES"  # enable post-quantum crypto
+#   cloudflared_edge_ip_version=""  # auto, 4, or 6
+#   cloudflared_protocol=""         # auto, quic, or http2
+#   cloudflared_loglevel="info"     # debug, info, warn, error, fatal
 
 . /etc/rc.subr
 
 name="cloudflared"
 rcvar="${name}_enable"
-command="/usr/local/bin/cloudflared"
-command_args="tunnel run --config /usr/local/etc/cloudflared/config.yml"
-pidfile="/var/run/${name}.pid"
-cloudflared_enable="${cloudflared_enable:-NO}"
 
 load_rc_config $name
+
+: ${cloudflared_enable:="NO"}
+: ${cloudflared_mode:="token"}
+: ${cloudflared_token_file:="/usr/local/etc/cloudflared/token"}
+: ${cloudflared_config:="/usr/local/etc/cloudflared/config.yml"}
+: ${cloudflared_post_quantum:="YES"}
+: ${cloudflared_edge_ip_version:=""}
+: ${cloudflared_protocol:=""}
+: ${cloudflared_loglevel:="info"}
+
+command="/usr/local/bin/cloudflared"
+pidfile="/var/run/${name}.pid"
+logfile="/var/log/cloudflared/cloudflared.log"
+
+# Build command arguments based on mode
+build_command_args() {
+    args="--loglevel ${cloudflared_loglevel}"
+
+    # Post-quantum cryptography
+    if checkyesno cloudflared_post_quantum; then
+        args="${args} --post-quantum"
+    fi
+
+    # Edge IP version
+    case "${cloudflared_edge_ip_version}" in
+        4|ipv4) args="${args} --edge-ip-version 4" ;;
+        6|ipv6) args="${args} --edge-ip-version 6" ;;
+    esac
+
+    # Protocol
+    case "${cloudflared_protocol}" in
+        quic)  args="${args} --protocol quic" ;;
+        http2) args="${args} --protocol http2" ;;
+    esac
+
+    # Mode-specific arguments
+    case "${cloudflared_mode}" in
+        token)
+            if [ -f "${cloudflared_token_file}" ]; then
+                token=$(cat "${cloudflared_token_file}")
+                args="${args} tunnel run --token ${token}"
+            else
+                echo "Error: Token file not found: ${cloudflared_token_file}"
+                return 1
+            fi
+            ;;
+        config)
+            if [ -f "${cloudflared_config}" ]; then
+                args="${args} tunnel --config ${cloudflared_config} run"
+            else
+                echo "Error: Config file not found: ${cloudflared_config}"
+                return 1
+            fi
+            ;;
+        *)
+            echo "Error: Unknown mode: ${cloudflared_mode}"
+            return 1
+            ;;
+    esac
+
+    echo "${args}"
+}
+
+start_precmd="${name}_prestart"
+cloudflared_prestart() {
+    # Ensure log directory exists
+    mkdir -p /var/log/cloudflared
+    chown root:wheel /var/log/cloudflared
+
+    # Build and validate command args
+    command_args=$(build_command_args)
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+}
+
+command_args=""
+start_cmd="${name}_start"
+cloudflared_start() {
+    command_args=$(build_command_args)
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
+    echo "Starting ${name}."
+    /usr/sbin/daemon -p ${pidfile} -o ${logfile} ${command} ${command_args}
+}
+
+stop_cmd="${name}_stop"
+cloudflared_stop() {
+    if [ -f ${pidfile} ]; then
+        pid=$(cat ${pidfile})
+        echo "Stopping ${name}."
+        kill ${pid} 2>/dev/null
+        rm -f ${pidfile}
+    else
+        echo "${name} is not running."
+    fi
+}
+
+status_cmd="${name}_status"
+cloudflared_status() {
+    if [ -f ${pidfile} ]; then
+        pid=$(cat ${pidfile})
+        if kill -0 ${pid} 2>/dev/null; then
+            echo "${name} is running as pid ${pid}."
+            return 0
+        fi
+    fi
+    echo "${name} is not running."
+    return 1
+}
+
 run_rc_command "$1"
