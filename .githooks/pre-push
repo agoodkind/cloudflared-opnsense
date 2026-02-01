@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Git pre-push hook to trigger build on freebsd-dev
+# Only triggers when pushing to the main branch.
+
+_remote="$1"
+_url="$2"
+
+z40=0000000000000000000000000000000000000000
+
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+    if [[ "$local_ref" == "refs/heads/main" ]]; then
+        if [[ "$local_sha" != "$z40" ]]; then
+            echo "Push to main detected. Triggering FreeBSD build..."
+            # Use the helper script to trigger the build
+            # We don't block the push if the trigger fails
+            "$(dirname "$0")/../scripts/trigger-build.sh" || echo "WARNING: Build trigger failed"
+        fi
+    fi
+done

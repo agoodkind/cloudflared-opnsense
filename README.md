@@ -5,6 +5,7 @@ OPNsense plugin for Cloudflare Tunnel (cloudflared) with automated FreeBSD packa
 ## Architecture
 
 ### Build System
+
 - **Build Host**: freebsd-dev (FreeBSD 14.3) with native Go toolchain
 - **Build Script**: `scripts/build-and-release.sh` - automated package creation
 - **Execution**: Cron job checks for new cloudflared releases every 30 minutes
@@ -30,6 +31,7 @@ Two packages are built for each cloudflared release:
 **GitHub Releases**: Packages uploaded to GitHub releases with tags like `2026.1.1-freebsd-r1`
 
 **FreeBSD pkg Repository**:
+
 - Metadata served from freebsd-dev (nginx port 8080): `https://cloudflared-opnsense-pkg.goodkind.io`
 - Domain routing: Cloudflare DNS → Traefik → nginx on freebsd-dev
 - Repository files: `meta.conf`, `data.pkg`, `packagesite.yaml`, `packagesite.pkg`
@@ -38,6 +40,7 @@ Two packages are built for each cloudflared release:
 ## Build Process
 
 ### Version Check
+
 ```bash
 # Script checks GitHub API for latest cloudflared release
 latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | grep tag_name)
@@ -46,12 +49,14 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
 ### Build Flow
 
 1. **Update Repository**
+
    ```bash
    git fetch origin main
    git reset --hard origin/main
    ```
 
 2. **Clone cloudflared Source**
+
    ```bash
    git clone --depth 1 --branch $version https://github.com/cloudflare/cloudflared.git
    ```
@@ -62,6 +67,7 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
    - Enable FreeBSD support in diagnostics
 
 4. **Build Binary**
+
    ```bash
    gmake cloudflared  # Uses Go vendor modules
    ```
@@ -81,6 +87,7 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
    - Run `pkg create` to build `os-cloudflared-{version}_{revision}.pkg`
 
 7. **Upload to GitHub Releases**
+
    ```bash
    gh release create $tag \
        --title "Cloudflared $version packages for FreeBSD (revision $revision)" \
@@ -109,7 +116,8 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
 ## Package Repository
 
 ### Structure
-```
+
+```text
 /var/tmp/cloudflared-repo/
 ├── All/
 │   ├── cloudflared-2026.1.1.pkg
@@ -122,7 +130,8 @@ latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/la
 ```
 
 ### meta.conf Format
-```
+
+```text
 version = 2;
 packing_format = "tzst";
 manifests = "packagesite.yaml";
@@ -136,10 +145,37 @@ Note: `data` field removed to support absolute URLs in packagesite.yaml
 ### packagesite.yaml Format
 
 NDJSON (one compact JSON object per line per package):
+
 ```json
 {"name":"os-cloudflared","version":"2026.1.1_20","path":"http://[...]/os-cloudflared-2026.1.1_20.pkg",...}
 {"name":"cloudflared","version":"2026.1.1","path":"http://[...]/cloudflared-2026.1.1.pkg",...}
 ```
+
+## Automated Build on Push
+
+The repository is configured with a git `pre-push` hook that automatically triggers a build on `freebsd-dev` when pushing to the `main` branch.
+
+### Setup
+
+To enable automated builds on push:
+
+```bash
+# Run the setup script to configure git hooks
+./scripts/setup-git-hooks.sh
+```
+
+The hook uses SSH to connect to `freebsd-dev`. Ensure your SSH keys are configured and you can connect without a password:
+
+```bash
+ssh root@freebsd-dev "echo 'Connection successful'"
+```
+
+### How it works
+
+1. **Git Hook**: When you run `git push origin main`, the `.githooks/pre-push` script is executed.
+2. **Trigger Script**: The hook calls `scripts/trigger-build.sh`, which SSHs to `freebsd-dev`.
+3. **Build Execution**: The build script `scripts/build-and-release.sh --force` is started in the background on the build host.
+4. **Asynchronous**: The push continues immediately while the build runs in the background.
 
 ## Manual Build
 
@@ -161,25 +197,32 @@ cat /var/tmp/cloudflared-repo/packagesite.yaml
 ## Files
 
 ### Build Scripts
+
 - `scripts/build-and-release.sh` - Main build and release automation
+- `scripts/trigger-build.sh` - SSH helper for triggering builds remotely
 - `scripts/setup-build-host.sh` - Initial freebsd-dev setup
+- `scripts/setup-git-hooks.sh` - Configure local git hooks
 - `scripts/setup-router-repo.sh` - OPNsense repository configuration
 
 ### Setup Scripts
+
 - `setup-freebsd-dev.sh` - Configure freebsd-dev for automated builds
 - `setup-router-updates.sh` - Configure OPNsense to use package repository
 
 ### Package Metadata
+
 - `packages/cloudflared/` - Binary package metadata (+MANIFEST, +DESC, +POST_INSTALL, pkg-plist)
 - `packages/os-cloudflared/` - Plugin package metadata (+MANIFEST, +DESC, +POST_INSTALL, +POST_DEINSTALL, pkg-plist)
 
 ### OPNsense Plugin Source
+
 - `src/opnsense/mvc/` - MVC components (controllers, models, views)
 - `src/opnsense/scripts/cloudflared/` - Backend scripts (config generation, rc.d service)
 - `src/opnsense/service/conf/actions.d/` - configd actions
 - `src/opnsense/www/menu/` - Menu integration
 
 ### Repository Files
+
 - `pkg/` - Repository metadata backup (meta.conf, data.pkg, packagesite.*)
 - Served from `/var/tmp/cloudflared-repo/` on freebsd-dev
 
@@ -198,11 +241,13 @@ cat /var/tmp/cloudflared-repo/packagesite.yaml
 ### Build Failures
 
 Check build logs:
+
 ```bash
 ssh root@freebsd-dev "tail -50 /var/log/cloudflared-build.log"
 ```
 
 Verify state files:
+
 ```bash
 ssh root@freebsd-dev "cat /var/db/cloudflared-build-state /var/db/cloudflared-revision"
 ```
@@ -210,12 +255,14 @@ ssh root@freebsd-dev "cat /var/db/cloudflared-build-state /var/db/cloudflared-re
 ### Package Issues
 
 Verify package creation:
+
 ```bash
 ssh root@freebsd-dev "ls -lh /var/tmp/cloudflared-repo/All/"
 ssh root@freebsd-dev "pkg info -f /var/tmp/cloudflared-repo/All/os-cloudflared-*.pkg"
 ```
 
 Check repository metadata:
+
 ```bash
 curl -s https://cloudflared-opnsense-pkg.goodkind.io/packagesite.yaml | jq .
 ```
