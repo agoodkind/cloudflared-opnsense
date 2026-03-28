@@ -104,15 +104,14 @@ jobs:
 
       - name: Build in FreeBSD VM
         uses: vmactions/freebsd-vm@v1.4.3
-        env:
-          CF_VERSION: ${{ needs.check.outputs.version }}
-          CF_REVISION: ${{ needs.check.outputs.revision }}
         with:
           usesh: true
           prepare: |
             pkg install -y go gmake git
           run: |
             set -e
+            CF_VERSION="${{ needs.check.outputs.version }}"
+            CF_REVISION="${{ needs.check.outputs.revision }}"
             REPO_DIR="${GITHUB_WORKSPACE}"
             WORK_DIR="${GITHUB_WORKSPACE}/.cache/cf-build"
             PKG_REPO_DIR="${GITHUB_WORKSPACE}/pkg-repo-build"
