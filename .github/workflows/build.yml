@@ -137,7 +137,7 @@ jobs:
           usesh: true
           prepare: |
             pkg upgrade -y
-            pkg install -y go gmake
+            pkg install -y go gmake git
           run: |
             set -e
             CF_VERSION="${{ needs.check.outputs.version }}"
