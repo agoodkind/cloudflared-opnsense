@@ -121,9 +121,10 @@ jobs:
             mkdir -p "${WORK_DIR}" "${PKG_REPO_DIR}/All"
 
             # Build the builder and configd binaries natively on FreeBSD.
+            # -buildvcs=false avoids git safe-directory issues in the VM.
             cd "${REPO_DIR}"
-            go build -o dist/cloudflared-builder ./cmd/cloudflared-builder
-            go build -o dist/cloudflared-configd  ./cmd/cloudflared-configd
+            go build -buildvcs=false -o dist/cloudflared-builder ./cmd/cloudflared-builder
+            go build -buildvcs=false -o dist/cloudflared-configd  ./cmd/cloudflared-configd
 
             # Clone and patch cloudflared source.
             cd "${WORK_DIR}"
