@@ -95,8 +95,36 @@ jobs:
           path: .cache/build-state
           key: cloudflared-build-state
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
+
+      - name: Cross-compile for FreeBSD (build gate)
+        run: |
+          GOOS=freebsd GOARCH=amd64 \
+            go build -buildvcs=false ./cmd/cloudflared-builder ./cmd/cloudflared-configd
+
+      - name: shellcheck CI scripts
+        run: |
+          sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=error \
+            scripts/ci/upload-r2.sh \
+            scripts/ci/create-release.sh \
+            scripts/ci/commit-metadata.sh
+
   build:
-    needs: check
+    needs: [check, test]
     if: needs.check.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
@@ -203,61 +231,17 @@ jobs:
 
       - name: Upload packages and metadata to R2
         env:
-          VERSION: ${{ needs.check.outputs.version }}
-          REVISION: ${{ needs.check.outputs.revision }}
-        run: |
-          set -e
-          ENDPOINT="https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          BUCKET="cloudflared-opnsense-pkg"
-
-          for f in _artifact/pkg-repo-build/All/*.pkg; do
-            [ -f "$f" ] || continue
-            aws s3 cp "$f" "s3://${BUCKET}/All/$(basename "$f")" \
-              --endpoint-url "${ENDPOINT}"
-          done
-
-          for name in meta.conf meta packagesite.yaml packagesite.pkg data.pkg; do
-            f="_artifact/pkg/${name}"
-            if [ -f "$f" ]; then
-              aws s3 cp "$f" "s3://${BUCKET}/${name}" \
-                --endpoint-url "${ENDPOINT}"
-            fi
-          done
+          ARTIFACT_DIR: _artifact
+        run: bash scripts/ci/upload-r2.sh
 
       - name: Create GitHub release
         env:
           VERSION: ${{ needs.check.outputs.version }}
           REVISION: ${{ needs.check.outputs.revision }}
-        run: |
-          set -e
-          TAG="${VERSION}-freebsd-r${REVISION}"
-          PLUGIN_VER="${VERSION}_${REVISION}"
-          PKG_CF="_artifact/pkg-repo-build/All/cloudflared-${VERSION}.pkg"
-          PKG_OS="_artifact/pkg-repo-build/All/os-cloudflared-${PLUGIN_VER}.pkg"
-
-          if gh release view "${TAG}" &>/dev/null; then
-            gh release delete "${TAG}" --yes --cleanup-tag
-          fi
-          gh release create "${TAG}" \
-            --title "Cloudflared ${VERSION} FreeBSD (r${REVISION})" \
-            --notes "FreeBSD amd64 packages for cloudflared ${VERSION}." \
-            "${PKG_CF}" "${PKG_OS}"
+          ARTIFACT_DIR: _artifact
+        run: bash scripts/ci/create-release.sh
 
       - name: Commit pkg metadata to main
-        run: |
-          set -e
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-
-          rm -rf pkg
-          mkdir -p pkg
-          cp -a _artifact/pkg/. pkg/
-
-          git add pkg/
-          if git diff --staged --quiet; then
-            echo "No pkg metadata changes to commit."
-            exit 0
-          fi
-
-          git commit -m "Update pkg repository metadata"
-          git push origin HEAD:main
+        env:
+          ARTIFACT_DIR: _artifact
+        run: bash scripts/ci/commit-metadata.sh
