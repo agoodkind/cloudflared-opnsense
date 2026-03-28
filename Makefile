@@ -1,90 +1,98 @@
-# Makefile for os-cloudflared OPNsense plugin
+# cloudflared-opnsense: OPNsense plugin with vendored Mk/plugins.mk
 #
-# OPNsense plugin build system integration.
-# Follows the layout described in:
-#   https://github.com/opnsense/plugins/blob/master/Mk/plugins.mk
+# OPNsense targets (install, metadata, opnsense-package) follow upstream layout.
+# Go targets build cloudflared-configd and cloudflared-builder.
 #
 # Usage:
-#   make                  Build Go binaries for FreeBSD amd64
-#   make package          Create pkg(8) packages (runs on freebsd-dev)
-#   make install          Deploy plugin files to a running OPNsense (dev only)
-#   make clean            Remove build artifacts
-#   make lint             Run go vet on all packages
-#   make fmt              Run gofmt on all Go source
+#   make | make build          Build Go binaries for the host
+#   make freebsd               Cross-compile Go binaries for FreeBSD amd64
+#   make install DESTDIR=...   Stage plugin files under DESTDIR (see Mk/plugins.mk)
+#   make metadata DESTDIR=...  Generate +MANIFEST, +DESC, plist under DESTDIR
+#   make opnsense-package      Full pkg create (needs deps; CI uses cloudflared-builder)
+#   make release               Build freebsd then run cloudflared-builder run
+#   make deploy-live           Push plugin to a live router over SSH (dev only)
+#   make clean                 Remove dist/ and work/
+#   make lint | make fmt       Go quality
 
-PLUGIN_NAME    = os-cloudflared
-PLUGIN_VERSION ?= $(shell cat pkg/version 2>/dev/null || echo "dev")
+PLUGIN_NAME=		cloudflared
+PLUGIN_VERSION?=	2026.3.0
+PLUGIN_REVISION?=	0
+PLUGIN_COMMENT=		OPNsense plugin for Cloudflare Tunnel
+PLUGIN_MAINTAINER=	agoodkind@users.noreply.github.com
+PLUGIN_WWW=		https://github.com/agoodkind/cloudflared-opnsense
+PLUGIN_LICENSE=		BSD2CLAUSE
 
-GO       = go
-GOOS_BSD = freebsd
-GOARCH   = amd64
+# Vendored Mk/; opnsense-scripts/ and opnsense-templates/ (see Mk/defaults.mk).
+PLUGINSDIR=		${.CURDIR}
 
-BUILD_DIR = dist
-CMD_CONFIGD = cmd/cloudflared-configd
-CMD_BUILDER = cmd/cloudflared-builder
+# Satisfy defaults.mk when php/python are not on PATH (e.g. CI builder VM).
+PLUGIN_PHP?=		82
+PLUGIN_PYTHON?=		311
 
-CONFIGD_BIN = $(BUILD_DIR)/cloudflared-configd
-BUILDER_BIN = $(BUILD_DIR)/cloudflared-builder
+.include "Mk/plugins.mk"
 
-# OPNsense plugin deployment paths (used by `make install` on a live router)
-PREFIX     = /usr/local
-SCRIPTS    = $(PREFIX)/opnsense/scripts/cloudflared
-SERVICE    = $(PREFIX)/opnsense/service/conf/actions.d
-MVC        = $(PREFIX)/opnsense/mvc/app
-WWW        = $(PREFIX)/opnsense/www
+GO=		go
+GOOS_BSD=	freebsd
+GOARCH=		amd64
 
-.PHONY: all build freebsd clean lint fmt install package
+BUILD_DIR=	dist
+CMD_CONFIGD=	cmd/cloudflared-configd
+CMD_BUILDER=	cmd/cloudflared-builder
+
+CONFIGD_BIN=	${BUILD_DIR}/cloudflared-configd
+BUILDER_BIN=	${BUILD_DIR}/cloudflared-builder
+
+PREFIX=		/usr/local
+SERVICE=	${PREFIX}/opnsense/service/conf/actions.d
+MVC=		${PREFIX}/opnsense/mvc/app
+
+.PHONY: all build freebsd clean lint fmt release deploy-live
+
+.DEFAULT_GOAL:=	build
 
 all: build
 
-## Build Go binaries for the current platform (dev/test use).
 build:
-	@mkdir -p $(BUILD_DIR)
-	$(GO) build -o $(CONFIGD_BIN) ./$(CMD_CONFIGD)
-	$(GO) build -o $(BUILDER_BIN) ./$(CMD_BUILDER)
+	@mkdir -p ${BUILD_DIR}
+	${GO} build -o ${CONFIGD_BIN} ./${CMD_CONFIGD}
+	${GO} build -o ${BUILDER_BIN} ./${CMD_BUILDER}
 
-## Cross-compile Go binaries for FreeBSD amd64 (production).
 freebsd:
-	@mkdir -p $(BUILD_DIR)
-	GOOS=$(GOOS_BSD) GOARCH=$(GOARCH) \
-		$(GO) build -o $(CONFIGD_BIN) ./$(CMD_CONFIGD)
-	GOOS=$(GOOS_BSD) GOARCH=$(GOARCH) \
-		$(GO) build -o $(BUILDER_BIN) ./$(CMD_BUILDER)
-	@echo "FreeBSD binaries written to $(BUILD_DIR)/"
+	@mkdir -p ${BUILD_DIR}
+	GOOS=${GOOS_BSD} GOARCH=${GOARCH} \
+		${GO} build -o ${CONFIGD_BIN} ./${CMD_CONFIGD}
+	GOOS=${GOOS_BSD} GOARCH=${GOARCH} \
+		${GO} build -o ${BUILDER_BIN} ./${CMD_BUILDER}
+	@echo "FreeBSD binaries written to ${BUILD_DIR}/"
 
-## Create FreeBSD packages.  Must run on the freebsd-dev build host.
-package: freebsd
-	$(BUILDER_BIN) run
+release: freebsd
+	${BUILDER_BIN} run
 
-## Install plugin to a running OPNsense (for development iteration).
-## Requires SSH access; set ROUTER= to the router's address.
-ROUTER ?= 3d06:bad:b01::1
+ROUTER?=	3d06:bad:b01::1
 
-install: freebsd
-	ssh root@$(ROUTER) "mkdir -p $(SCRIPTS) $(PREFIX)/bin $(PREFIX)/etc/rc.d"
-	scp $(CONFIGD_BIN) root@$(ROUTER):$(PREFIX)/bin/cloudflared-configd
-	scp src/opnsense/scripts/cloudflared/cloudflared.rc \
-		root@$(ROUTER):$(PREFIX)/etc/rc.d/cloudflared
+# Deploy to a live OPNsense host (development iteration; not DESTDIR staging).
+deploy-live: freebsd
+	ssh root@${ROUTER} "mkdir -p ${PREFIX}/bin ${PREFIX}/etc/rc.d"
+	scp ${CONFIGD_BIN} root@${ROUTER}:${PREFIX}/bin/cloudflared-configd
+	scp src/etc/rc.d/cloudflared root@${ROUTER}:${PREFIX}/etc/rc.d/cloudflared
 	scp -r src/opnsense/mvc/app/controllers/OPNsense \
-		root@$(ROUTER):$(MVC)/controllers/
+		root@${ROUTER}:${MVC}/controllers/
 	scp -r src/opnsense/mvc/app/models/OPNsense \
-		root@$(ROUTER):$(MVC)/models/
+		root@${ROUTER}:${MVC}/models/
 	scp -r src/opnsense/mvc/app/views/OPNsense \
-		root@$(ROUTER):$(MVC)/views/
+		root@${ROUTER}:${MVC}/views/
 	scp src/opnsense/service/conf/actions.d/actions_cloudflared.conf \
-		root@$(ROUTER):$(SERVICE)/
-	ssh root@$(ROUTER) "configctl template reload OPNsense/Cloudflared || true"
-	ssh root@$(ROUTER) "service configd restart"
-	@echo "Plugin deployed to $(ROUTER)"
+		root@${ROUTER}:${SERVICE}/
+	ssh root@${ROUTER} "configctl template reload OPNsense/Cloudflared || true"
+	ssh root@${ROUTER} "service configd restart"
+	@echo "Plugin deployed to ${ROUTER}"
 
-## Run go vet on all packages.
 lint:
-	$(GO) vet ./...
+	${GO} vet ./...
 
-## Format all Go source.
 fmt:
 	gofmt -w .
 
-## Remove compiled artifacts.
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf ${BUILD_DIR}
+	rm -rf ${.CURDIR}/work

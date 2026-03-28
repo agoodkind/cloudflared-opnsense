@@ -66,6 +66,8 @@ make lint
 make fmt
 ```
 
+On macOS, `/usr/bin/make` is GNU make and does not parse the BSD `.include` used by OPNsense `Mk/plugins.mk`. Use Homebrew `bmake` (`brew install bmake`) and run `bmake build`, or invoke `go build` on the `cmd/` packages directly.
+
 ## Build Pipeline
 
 The one-shot pipeline on freebsd-dev:
@@ -91,8 +93,10 @@ The one-shot pipeline on freebsd-dev:
 
 ```bash
 # Deploy compiled plugin to a running router (set ROUTER= to your router's IPv6)
-make install ROUTER=3d06:bad:b01::1
+make deploy-live ROUTER=3d06:bad:b01::1
 ```
+
+Staging for packaging uses OPNsense `make install` / `make metadata` with `DESTDIR` (see top-level `Makefile` and `Mk/plugins.mk`); CI runs those via `cloudflared-builder package` on FreeBSD.
 
 ## configd binary usage on OPNsense
 

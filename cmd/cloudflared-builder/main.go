@@ -453,74 +453,61 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	if err := os.RemoveAll(staging); err != nil {
 		return err
 	}
-
-	// Copy the entire src/opnsense tree into staging.
-	srcOpnsense := filepath.Join(repoDir, "src", "opnsense")
-	dstOpnsense := filepath.Join(staging, "usr", "local", "opnsense")
-	if err := copyTree(srcOpnsense, dstOpnsense); err != nil {
-		return fmt.Errorf("copy src/opnsense: %w", err)
-	}
-
-	// Install the Go configd binary (cross-compiled for FreeBSD amd64).
-	binDst := filepath.Join(staging, "usr", "local", "bin")
-	if err := os.MkdirAll(binDst, 0755); err != nil {
+	if err := os.MkdirAll(staging, 0755); err != nil {
 		return err
 	}
+
+	revStr := strconv.Itoa(revision)
+	makeVars := []string{
+		"DESTDIR=" + staging,
+		"WRKSRC=" + staging,
+		"PLUGIN_VERSION=" + cfVersion,
+		"PLUGIN_REVISION=" + revStr,
+	}
+	if err := runMake(repoDir, "install", makeVars); err != nil {
+		return fmt.Errorf("make install: %w", err)
+	}
+
 	configdBin := filepath.Join(repoDir, "dist", "cloudflared-configd")
-	if _, err := os.Stat(configdBin); err == nil {
-		if err := copyFile(configdBin, filepath.Join(binDst, "cloudflared-configd"), 0755); err != nil {
-			return err
-		}
+	binDst := filepath.Join(staging, "usr", "local", "bin", "cloudflared-configd")
+	if err := copyFile(configdBin, binDst, 0755); err != nil {
+		return fmt.Errorf("copy cloudflared-configd: %w", err)
 	}
 
-	// Create runtime directories.
-	for _, d := range []string{
-		filepath.Join(staging, "usr", "local", "etc", "cloudflared"),
-		filepath.Join(staging, "var", "log", "cloudflared"),
-	} {
-		if err := os.MkdirAll(d, 0755); err != nil {
-			return err
-		}
+	if err := runMake(repoDir, "metadata", makeVars); err != nil {
+		return fmt.Errorf("make metadata: %w", err)
 	}
 
-	// rc.d script.
-	rcDst := filepath.Join(staging, "usr", "local", "etc", "rc.d")
-	if err := os.MkdirAll(rcDst, 0755); err != nil {
-		return err
+	plistPath := filepath.Join(staging, "plist")
+	extraPlist := []string{
+		"/usr/local/bin/cloudflared-configd",
+		"@dir /var/log/cloudflared",
+		"@dir /usr/local/etc/cloudflared",
 	}
-	if err := copyFile(
-		filepath.Join(repoDir, "src", "opnsense", "scripts", "cloudflared", "cloudflared.rc"),
-		filepath.Join(rcDst, "cloudflared"),
-		0755,
-	); err != nil {
+	if err := appendPlistLines(plistPath, extraPlist); err != nil {
 		return err
 	}
 
-	pkgMeta := filepath.Join(repoDir, "packages", "os-cloudflared")
-
-	manifest, err := os.ReadFile(filepath.Join(pkgMeta, "+MANIFEST"))
-	if err != nil {
-		return err
-	}
-	rendered := strings.NewReplacer(
-		"{{plugin_version}}", pkgVersion,
-		"{{version}}", cfVersion,
-	).Replace(string(manifest))
-
-	desc, err := os.ReadFile(filepath.Join(pkgMeta, "+DESC"))
+	manifestUCL, err := os.ReadFile(filepath.Join(staging, "+MANIFEST"))
 	if err != nil {
 		return err
 	}
 
-	plistPath := filepath.Join(pkgMeta, "pkg-plist")
+	desc, err := os.ReadFile(filepath.Join(staging, "+DESC"))
+	if err != nil {
+		return err
+	}
+
 	scripts := map[string]string{}
 	for _, s := range []struct{ file, key string }{
 		{"+POST_INSTALL", "post-install"},
 		{"+POST_DEINSTALL", "post-deinstall"},
 	} {
-		if data, err := os.ReadFile(filepath.Join(pkgMeta, s.file)); err == nil {
-			scripts[s.key] = string(data)
+		data, err := os.ReadFile(filepath.Join(staging, s.file))
+		if err != nil {
+			return fmt.Errorf("read %s: %w", s.file, err)
 		}
+		scripts[s.key] = string(data)
 	}
 
 	outDir := filepath.Join(pkgRepoDir, "All")
@@ -531,7 +518,7 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	pkgFile := filepath.Join(outDir, pkgName+".pkg")
 	if err := createPkgArchive(
 		pkgFile, staging, plistPath,
-		rendered, string(desc), scripts,
+		string(manifestUCL), string(desc), scripts,
 	); err != nil {
 		return fmt.Errorf("create plugin package: %w", err)
 	}
@@ -543,6 +530,29 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	return nil
 }
 
+func runMake(repoDir, target string, vars []string) error {
+	args := append([]string{"-C", repoDir}, vars...)
+	args = append(args, target)
+	cmd := exec.Command("make", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func appendPlistLines(path string, lines []string) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for _, line := range lines {
+		if _, err := fmt.Fprintf(f, "%s\n", line); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ---- pkg archive builder ---------------------------------------------------
 //
 // Builds FreeBSD .pkg archives directly in Go, producing the legacy
@@ -551,8 +561,9 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 // This avoids depending on the host's `pkg create`, which on newer
 // FreeBSD produces a detailed object format that older pkg segfaults on.
 
-// parsePlist reads a pkg-plist file and returns the list of regular file
-// paths (relative to prefix) and the list of @dir absolute paths.
+// parsePlist reads a pkg-plist file and returns regular file paths and @dir
+// paths. File paths may be absolute (/usr/local/...) as produced by OPNsense
+// Mk/plugins.mk, or relative to prefix (legacy packages/cloudflared layouts).
 func parsePlist(path string) (files []string, dirs []string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -567,10 +578,15 @@ func parsePlist(path string) (files []string, dirs []string, err error) {
 			continue
 		}
 		if strings.HasPrefix(line, "@dir ") {
-			dirs = append(dirs, strings.TrimSpace(line[5:]))
-		} else {
-			files = append(files, line)
+			dirs = append(dirs, strings.TrimSpace(strings.TrimPrefix(line, "@dir ")))
+			continue
 		}
+		if strings.HasPrefix(line, "@sample ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "@sample "))
+		} else if strings.HasPrefix(line, "@shadow ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "@shadow "))
+		}
+		files = append(files, line)
 	}
 	return files, dirs, scanner.Err()
 }
@@ -628,6 +644,18 @@ func parseUCLManifest(ucl string) map[string]any {
 	return m
 }
 
+func plistAbsPath(prefix, entry string) string {
+	if strings.HasPrefix(entry, "/") {
+		return entry
+	}
+	return prefix + "/" + entry
+}
+
+func stagingPathForAbs(stagingDir, absPath string) string {
+	trim := strings.TrimPrefix(absPath, "/")
+	return filepath.Join(stagingDir, filepath.FromSlash(trim))
+}
+
 // createPkgArchive builds a FreeBSD .pkg file (zstd-compressed tar)
 // from the staging directory and plist, using the legacy manifest format
 // compatible with OPNsense's pkg 2.x.
@@ -654,17 +682,17 @@ func createPkgArchive(
 	filesMap := make(map[string]string)
 	var flatsize int64
 	for _, relPath := range plistFiles {
-		absPath := prefix + "/" + relPath
-		diskPath := filepath.Join(stagingDir, absPath)
+		absPath := plistAbsPath(prefix, relPath)
+		diskPath := stagingPathForAbs(stagingDir, absPath)
 		hash, err := sha256File(diskPath)
 		if err != nil {
-			return fmt.Errorf("hash %s: %w", relPath, err)
+			return fmt.Errorf("hash %s: %w", absPath, err)
 		}
 		filesMap[absPath] = hash
 
 		info, err := os.Stat(diskPath)
 		if err != nil {
-			return fmt.Errorf("stat %s: %w", relPath, err)
+			return fmt.Errorf("stat %s: %w", absPath, err)
 		}
 		flatsize += info.Size()
 	}
@@ -748,15 +776,15 @@ func createPkgArchive(
 	// Add files in sorted order (matching pkg create behavior).
 	sort.Strings(plistFiles)
 	for _, relPath := range plistFiles {
-		absPath := prefix + "/" + relPath
-		diskPath := filepath.Join(stagingDir, absPath)
+		absPath := plistAbsPath(prefix, relPath)
+		diskPath := stagingPathForAbs(stagingDir, absPath)
 
 		info, err := os.Stat(diskPath)
 		if err != nil {
 			return err
 		}
 		hdr := &tar.Header{
-			Name: absPath,
+			Name: filepath.ToSlash(absPath),
 			Size: info.Size(),
 			Mode: int64(info.Mode()),
 		}
