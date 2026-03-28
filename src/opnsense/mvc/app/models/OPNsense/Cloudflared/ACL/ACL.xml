@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+  ACL definitions for the Cloudflared plugin.
+  These match the controller/view routes defined in IndexController.php and
+  Api/SettingsController.php / Api/ServiceController.php.
+-->
+<acl>
+    <page-services-cloudflared>
+        <patterns>
+            <pattern>ui/cloudflared*</pattern>
+            <pattern>api/cloudflared/*</pattern>
+        </patterns>
+        <description>Services: Cloudflare Tunnel (cloudflared)</description>
+    </page-services-cloudflared>
+</acl>

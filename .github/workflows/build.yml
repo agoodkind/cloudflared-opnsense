@@ -1,0 +1,259 @@
+name: Build FreeBSD packages
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force rebuild even when upstream version unchanged"
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+      version: ${{ steps.check.outputs.version }}
+      revision: ${{ steps.check.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Restore build state
+        uses: actions/cache/restore@v5.0.4
+        with:
+          path: .cache/build-state
+          key: cloudflared-build-state
+
+      - name: Decide version and revision
+        id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_INPUT: ${{ github.event_name == 'workflow_dispatch' && format('{0}', github.event.inputs.force) || 'false' }}
+        run: |
+          set -e
+          FORCE_INPUT="${FORCE_INPUT:-false}"
+          CACHE_DIR="${GITHUB_WORKSPACE}/.cache/build-state"
+          mkdir -p "${CACHE_DIR}"
+
+          LATEST="$(curl -sL \
+            https://api.github.com/repos/cloudflare/cloudflared/releases/latest \
+            | jq -r .tag_name)"
+
+          LAST_VERSION=""
+          if [ -f "${CACHE_DIR}/last_version" ]; then
+            LAST_VERSION="$(tr -d '\n' < "${CACHE_DIR}/last_version")"
+          fi
+
+          LAST_REV=0
+          if [ -f "${CACHE_DIR}/last_revision" ]; then
+            LAST_REV="$(tr -d '\n' < "${CACHE_DIR}/last_revision")"
+          fi
+
+          FORCE="false"
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_INPUT}" = "true" ]; then
+            FORCE="true"
+          fi
+
+          SKIP="false"
+          if [ "${EVENT_NAME}" = "schedule" ] \
+            && [ "${LATEST}" = "${LAST_VERSION}" ] \
+            && [ "${FORCE}" != "true" ]; then
+            SKIP="true"
+          fi
+
+          if [ "${SKIP}" = "true" ]; then
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            echo "version=" >> "${GITHUB_OUTPUT}"
+            echo "revision=" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          REV=1
+          if [ -n "${LAST_VERSION}" ] && [ "${LATEST}" = "${LAST_VERSION}" ]; then
+            REV=$((LAST_REV + 1))
+          fi
+
+          echo "skip=false" >> "${GITHUB_OUTPUT}"
+          echo "version=${LATEST}" >> "${GITHUB_OUTPUT}"
+          echo "revision=${REV}" >> "${GITHUB_OUTPUT}"
+
+          printf '%s\n' "${LATEST}" > "${CACHE_DIR}/last_version"
+          printf '%s\n' "${REV}" > "${CACHE_DIR}/last_revision"
+
+      - name: Save build state
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/cache/save@v5.0.4
+        with:
+          path: .cache/build-state
+          key: cloudflared-build-state
+
+  build:
+    needs: check
+    if: needs.check.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Build in FreeBSD VM
+        uses: vmactions/freebsd-vm@v1.4.3
+        env:
+          CF_VERSION: ${{ needs.check.outputs.version }}
+          CF_REVISION: ${{ needs.check.outputs.revision }}
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y go gmake git
+          run: |
+            set -e
+            REPO_DIR="${GITHUB_WORKSPACE}"
+            WORK_DIR="${GITHUB_WORKSPACE}/.cache/cf-build"
+            PKG_REPO_DIR="${GITHUB_WORKSPACE}/pkg-repo-build"
+
+            rm -rf "${WORK_DIR}" "${PKG_REPO_DIR}"
+            mkdir -p "${WORK_DIR}" "${PKG_REPO_DIR}/All"
+
+            # Build the builder and configd binaries natively on FreeBSD.
+            cd "${REPO_DIR}"
+            go build -o dist/cloudflared-builder ./cmd/cloudflared-builder
+            go build -o dist/cloudflared-configd  ./cmd/cloudflared-configd
+
+            # Clone and patch cloudflared source.
+            cd "${WORK_DIR}"
+            git clone --depth 1 --branch "${CF_VERSION}" \
+              https://github.com/cloudflare/cloudflared.git
+
+            sed -i '' 's/darwin || linux/darwin || linux || freebsd/g' \
+              cloudflared/diagnostic/network/collector_unix.go \
+              cloudflared/diagnostic/network/collector_unix_test.go \
+              2>/dev/null || true
+
+            if [ -f cloudflared/diagnostic/system_collector_linux.go ]; then
+              cp cloudflared/diagnostic/system_collector_linux.go \
+                cloudflared/diagnostic/system_collector_freebsd.go
+              sed -i '' 's/linux/freebsd/g' \
+                cloudflared/diagnostic/system_collector_freebsd.go
+            fi
+
+            cd cloudflared
+            gmake cloudflared
+
+            # Run the Go builder for package + repo steps.
+            "${REPO_DIR}/dist/cloudflared-builder" \
+              -version "${CF_VERSION}" \
+              -revision "${CF_REVISION}" \
+              -repo-dir "${REPO_DIR}" \
+              -work-dir "${WORK_DIR}" \
+              -pkg-repo-dir "${PKG_REPO_DIR}" \
+              package
+
+            "${REPO_DIR}/dist/cloudflared-builder" \
+              -version "${CF_VERSION}" \
+              -revision "${CF_REVISION}" \
+              -repo-dir "${REPO_DIR}" \
+              -work-dir "${WORK_DIR}" \
+              -pkg-repo-dir "${PKG_REPO_DIR}" \
+              repo
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: pkg-build
+          path: |
+            pkg-repo-build
+            pkg
+
+  publish:
+    needs: [check, build]
+    if: >-
+      needs.check.outputs.skip != 'true' &&
+      needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: pkg-build
+          path: _artifact
+
+      - name: Install AWS CLI
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq awscli
+
+      - name: Upload packages and metadata to R2
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          REVISION: ${{ needs.check.outputs.revision }}
+        run: |
+          set -e
+          ENDPOINT="https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          BUCKET="cloudflared-opnsense-pkg"
+
+          for f in _artifact/pkg-repo-build/All/*.pkg; do
+            [ -f "$f" ] || continue
+            aws s3 cp "$f" "s3://${BUCKET}/All/$(basename "$f")" \
+              --endpoint-url "${ENDPOINT}"
+          done
+
+          for name in meta.conf meta packagesite.yaml packagesite.pkg data.pkg; do
+            f="_artifact/pkg/${name}"
+            if [ -f "$f" ]; then
+              aws s3 cp "$f" "s3://${BUCKET}/${name}" \
+                --endpoint-url "${ENDPOINT}"
+            fi
+          done
+
+      - name: Create GitHub release
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          REVISION: ${{ needs.check.outputs.revision }}
+        run: |
+          set -e
+          TAG="${VERSION}-freebsd-r${REVISION}"
+          PLUGIN_VER="${VERSION}_${REVISION}"
+          PKG_CF="_artifact/pkg-repo-build/All/cloudflared-${VERSION}.pkg"
+          PKG_OS="_artifact/pkg-repo-build/All/os-cloudflared-${PLUGIN_VER}.pkg"
+
+          gh release create "${TAG}" \
+            --title "Cloudflared ${VERSION} FreeBSD (r${REVISION})" \
+            --notes "FreeBSD amd64 packages for cloudflared ${VERSION}." \
+            "${PKG_CF}" "${PKG_OS}"
+
+      - name: Commit pkg metadata to main
+        run: |
+          set -e
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          rm -rf pkg
+          mkdir -p pkg
+          cp -a _artifact/pkg/. pkg/
+
+          git add pkg/
+          if git diff --staged --quiet; then
+            echo "No pkg metadata changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update pkg repository metadata"
+          git push origin HEAD:main

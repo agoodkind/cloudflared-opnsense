@@ -1,268 +1,144 @@
 # Cloudflared OPNsense Plugin
 
-OPNsense plugin for Cloudflare Tunnel (cloudflared) with automated FreeBSD package building and distribution.
+OPNsense plugin for Cloudflare Tunnel (`cloudflared`) with automated FreeBSD package building and distribution.
 
 ## Architecture
 
-### Build System
+### Go Binaries
 
-- **Build Host**: freebsd-dev (FreeBSD 14.3) with native Go toolchain
-- **Build Script**: `scripts/build-and-release.sh` - automated package creation
-- **Execution**: Cron job checks for new cloudflared releases every 6 hours
-- **Version Detection**: GitHub API monitoring for upstream cloudflare/cloudflared releases
+All backend logic is written in Go. There are no Python scripts or shell scripts in the hot path.
+
+| Binary | Where it runs | Purpose |
+|---|---|---|
+| `cloudflared-configd` | OPNsense router | Reads `config.xml`, writes `rc.conf.d/cloudflared`, writes token or `config.yml`, starts/stops service. Called by configd. |
+| `cloudflared-builder` | freebsd-dev build host | Clones cloudflared source, applies FreeBSD patches, builds, packages, creates GitHub release, updates pkg repo metadata. |
+
+### OPNsense Plugin Layout
+
+Follows the canonical OPNsense plugin structure for potential future submission to the community plugins repository.
+
+```text
+src/opnsense/
+├── mvc/app/
+│   ├── controllers/OPNsense/Cloudflared/   # PHP API + UI controllers
+│   ├── models/OPNsense/Cloudflared/        # Settings.xml, ACL/ACL.xml, Menu/Menu.xml
+│   └── views/OPNsense/Cloudflared/         # Volt templates
+├── service/conf/actions.d/                 # configd action definitions
+└── scripts/cloudflared/                    # rc.d script
+```
 
 ### Package Structure
 
-Two packages are built for each cloudflared release:
+Two packages are built per cloudflared upstream release:
 
-1. **cloudflared-{version}.pkg** - Binary package (~17MB)
-   - Cloudflared binary compiled for FreeBSD
-   - Installed to `/usr/local/bin/cloudflared`
-   - Independent of OPNsense plugin
-
-2. **os-cloudflared-{version}_{revision}.pkg** - OPNsense plugin package (~6KB)
-   - Web UI (MVC controllers, models, views)
-   - Configuration management
-   - Service integration scripts
-   - Requires cloudflared binary package
+1. **`cloudflared-{version}.pkg`** (~17 MB) — upstream binary compiled for FreeBSD amd64
+2. **`os-cloudflared-{version}_{revision}.pkg`** (~few KB) — OPNsense plugin (UI, configd binary, rc.d)
 
 ### Distribution
 
-**GitHub Releases**: Packages uploaded to GitHub releases with tags like `2026.1.1-freebsd-r1`
+- Metadata served from freebsd-dev via nginx: `https://cloudflared-opnsense-pkg.goodkind.io`
+- Package downloads: GitHub releases with tags like `2026.3.0-freebsd-r1`
+- Repository metadata committed to `pkg/` in this repo as a backup
 
-**FreeBSD pkg Repository**:
+## Prerequisites
 
-- Metadata served from freebsd-dev (nginx port 8080): `https://cloudflared-opnsense-pkg.goodkind.io`
-- Domain routing: Cloudflare DNS → Traefik → nginx on freebsd-dev
-- Repository files: `meta.conf`, `data.pkg`, `packagesite.yaml`, `packagesite.pkg`
-- Package downloads: From GitHub releases
+### Build host (freebsd-dev)
 
-## Build Process
+- FreeBSD 14.3+, Go 1.21+, gmake, git, `gh` CLI authenticated, `pkg` tools, tar with zstd
 
-### Version Check
+### Development machine (macOS)
 
-```bash
-# Script checks GitHub API for latest cloudflared release
-latest=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | grep tag_name)
-```
+- Go 1.21+
 
-### Build Flow
-
-1. **Update Repository**
-
-   ```bash
-   git fetch origin main
-   git reset --hard origin/main
-   ```
-
-2. **Clone cloudflared Source**
-
-   ```bash
-   git clone --depth 1 --branch $version https://github.com/cloudflare/cloudflared.git
-   ```
-
-3. **Apply FreeBSD Patches**
-   - Add FreeBSD to build tags in `diagnostic/network/collector_unix.go`
-   - Create FreeBSD-specific system collector
-   - Enable FreeBSD support in diagnostics
-
-4. **Build Binary**
-
-   ```bash
-   gmake cloudflared  # Uses Go vendor modules
-   ```
-
-5. **Create Binary Package**
-   - Stage binary to `/usr/local/bin/cloudflared`
-   - Copy package metadata (`+MANIFEST`, `+DESC`, `+POST_INSTALL`, `pkg-plist`)
-   - Generate manifest with version substitution
-   - Run `pkg create` to build `cloudflared-{version}.pkg`
-   - Verify package size (must be > 10MB)
-
-6. **Create Plugin Package**
-   - Copy OPNsense plugin files from `src/opnsense/`
-   - Install rc.d service script
-   - Create required directories (`/usr/local/etc/cloudflared`, `/var/log/cloudflared`)
-   - Generate manifest with plugin version `{cloudflared_version}_{freebsd_revision}`
-   - Run `pkg create` to build `os-cloudflared-{version}_{revision}.pkg`
-
-7. **Upload to GitHub Releases**
-
-   ```bash
-   gh release create $tag \
-       --title "Cloudflared $version packages for FreeBSD (revision $revision)" \
-       cloudflared-$version.pkg \
-       os-cloudflared-${version}_${revision}.pkg
-   ```
-
-8. **Update pkg Repository Metadata**
-   - Clean old packages from `/var/tmp/cloudflared-repo/All/`
-   - Run `pkg repo .` to generate repository files
-   - Remove `data` field from `meta.conf` (enables absolute URLs)
-   - Update `packagesite.yaml` with package download URLs
-   - Compress metadata with zstd
-
-9. **Publish Repository Metadata**
-   - Copy `meta.conf`, `meta`, `data.pkg`, `packagesite.yaml`, `packagesite.pkg` to `pkg/`
-   - Commit and push to main branch (for backup/versioning)
-   - Metadata served directly from freebsd-dev nginx
-
-### Revision Tracking
-
-- State file: `/var/db/cloudflared-build-state` (current cloudflared version)
-- Revision file: `/var/db/cloudflared-revision` (FreeBSD-specific revision number)
-- Same cloudflared version gets incremented FreeBSD revision on rebuild
-
-## Package Repository
-
-### Structure
-
-```text
-/var/tmp/cloudflared-repo/
-├── All/
-│   ├── cloudflared-2026.1.1.pkg
-│   └── os-cloudflared-2026.1.1_20.pkg
-├── meta.conf          # Repository configuration
-├── meta               # Repository metadata
-├── data.pkg           # Package data archive
-├── packagesite.yaml   # Package manifest (NDJSON)
-└── packagesite.pkg    # Compressed package manifest (zstd)
-```
-
-### meta.conf Format
-
-```text
-version = 2;
-packing_format = "tzst";
-manifests = "packagesite.yaml";
-filesite = "filesite.yaml";
-manifests_archive = "packagesite";
-filesite_archive = "filesite";
-```
-
-Note: `data` field removed to support absolute URLs in packagesite.yaml
-
-### packagesite.yaml Format
-
-NDJSON (one compact JSON object per line per package):
-
-```json
-{"name":"os-cloudflared","version":"2026.1.1_20","path":"http://[...]/os-cloudflared-2026.1.1_20.pkg",...}
-{"name":"cloudflared","version":"2026.1.1","path":"http://[...]/cloudflared-2026.1.1.pkg",...}
-```
-
-## Automated Build on Push
-
-The repository is configured with a git `pre-push` hook that automatically triggers a build on `freebsd-dev` when pushing to the `main` branch.
-
-### Setup
-
-To enable automated builds on push:
+## Building
 
 ```bash
-# Run the setup script to configure git hooks
-./scripts/setup-git-hooks.sh
+# Build Go binaries for local platform (dev/test)
+make build
+
+# Cross-compile for FreeBSD amd64 (production)
+make freebsd
+
+# Run go vet
+make lint
+
+# Format Go source
+make fmt
 ```
 
-The hook uses SSH to connect to `freebsd-dev`. Ensure your SSH keys are configured and you can connect without a password:
+## Build Pipeline
+
+The one-shot pipeline on freebsd-dev:
 
 ```bash
-ssh root@freebsd-dev "echo 'Connection successful'"
-```
+# Via cron (every 6 hours) or manually:
+./scripts/build-and-release.sh
 
-### How it works
-
-1. **Git Hook**: When you run `git push origin main`, the `.githooks/pre-push` script is executed.
-2. **Trigger Script**: The hook calls `scripts/trigger-build.sh`, which SSHs to `freebsd-dev`.
-3. **Build Execution**: The build script `scripts/build-and-release.sh --force` is started in the background on the build host.
-4. **Asynchronous**: The push continues immediately while the build runs in the background.
-
-## Manual Build
-
-```bash
-# SSH to freebsd-dev
-ssh root@freebsd-dev
-
-# Run build script
-cd /root/cloudflared-opnsense
+# Force rebuild even if version unchanged:
 ./scripts/build-and-release.sh --force
 
-# Check build artifacts
-ls -lh /var/tmp/cloudflared-repo/All/
-
-# View repository metadata
-cat /var/tmp/cloudflared-repo/packagesite.yaml
+# Subcommands via the Go binary directly:
+./dist/cloudflared-builder check           # Is a new version available?
+./dist/cloudflared-builder build           # Clone + patch + compile
+./dist/cloudflared-builder package         # Create pkg(8) packages
+./dist/cloudflared-builder repo            # Regenerate pkg repository index
+./dist/cloudflared-builder publish         # GitHub release + push metadata
+./dist/cloudflared-builder run             # All of the above
+./dist/cloudflared-builder -force run      # Force rebuild with incremented revision
 ```
 
-## Files
+## Deploying to OPNsense (Development Iteration)
 
-### Build Scripts
+```bash
+# Deploy compiled plugin to a running router (set ROUTER= to your router's IPv6)
+make install ROUTER=3d06:bad:b01::1
+```
 
-- `scripts/build-and-release.sh` - Main build and release automation
-- `scripts/trigger-build.sh` - SSH helper for triggering builds remotely
-- `scripts/setup-build-host.sh` - Initial freebsd-dev setup
-- `scripts/setup-git-hooks.sh` - Configure local git hooks
-- `scripts/setup-router-repo.sh` - OPNsense repository configuration
+## configd binary usage on OPNsense
 
-### Setup Scripts
+```bash
+# Called automatically by configd on settings save; can also be called manually:
+/usr/local/bin/cloudflared-configd reconfigure
+/usr/local/bin/cloudflared-configd status
+/usr/local/bin/cloudflared-configd version
+/usr/local/bin/cloudflared-configd is-enabled  # exits 0 if enabled, 1 otherwise
+```
 
-- `setup-freebsd-dev.sh` - Configure freebsd-dev for automated builds
-- `setup-router-updates.sh` - Configure OPNsense to use package repository
+## State Files (on freebsd-dev)
 
-### Package Metadata
-
-- `packages/cloudflared/` - Binary package metadata (+MANIFEST, +DESC, +POST_INSTALL, pkg-plist)
-- `packages/os-cloudflared/` - Plugin package metadata (+MANIFEST, +DESC, +POST_INSTALL, +POST_DEINSTALL, pkg-plist)
-
-### OPNsense Plugin Source
-
-- `src/opnsense/mvc/` - MVC components (controllers, models, views)
-- `src/opnsense/scripts/cloudflared/` - Backend scripts (config generation, rc.d service)
-- `src/opnsense/service/conf/actions.d/` - configd actions
-- `src/opnsense/www/menu/` - Menu integration
-
-### Repository Files
-
-- `pkg/` - Repository metadata backup (meta.conf, data.pkg, packagesite.*)
-- Served from `/var/tmp/cloudflared-repo/` on freebsd-dev
-
-## Build Requirements
-
-- FreeBSD 14.3 or later
-- Go 1.21+ (`gmake` uses vendored modules)
-- Git
-- jq (JSON processing)
-- GitHub CLI (`gh`) with authentication
-- pkg tools (`pkg create`, `pkg repo`)
-- tar with zstd support
+| File | Contents |
+|---|---|
+| `/var/db/cloudflared-build-state` | Last successfully built cloudflared version |
+| `/var/db/cloudflared-revision` | FreeBSD revision number for that version |
 
 ## Troubleshooting
 
-### Build Failures
-
-Check build logs:
+**Check build log:**
 
 ```bash
 ssh root@freebsd-dev "tail -50 /var/log/cloudflared-build.log"
 ```
 
-Verify state files:
+**Inspect state:**
 
 ```bash
 ssh root@freebsd-dev "cat /var/db/cloudflared-build-state /var/db/cloudflared-revision"
 ```
 
-### Package Issues
-
-Verify package creation:
+**Check packages:**
 
 ```bash
 ssh root@freebsd-dev "ls -lh /var/tmp/cloudflared-repo/All/"
-ssh root@freebsd-dev "pkg info -f /var/tmp/cloudflared-repo/All/os-cloudflared-*.pkg"
 ```
 
-Check repository metadata:
+**Check repo metadata:**
 
 ```bash
 curl -s https://cloudflared-opnsense-pkg.goodkind.io/packagesite.yaml | jq .
+```
+
+**Verify configd binary works:**
+
+```bash
+ssh agoodkind@3d06:bad:b01::1 '/usr/local/bin/cloudflared-configd version'
 ```
