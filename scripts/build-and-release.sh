@@ -250,8 +250,8 @@ update_pkg_repository() {
     # Format: NDJSON (one compact JSON object per line per package)
     # Update package paths to direct GitHub releases download URLs
 
-    # Extract packagesite
-    tar -xzf packagesite.pkg
+    # Extract packagesite (pkg repo uses zstd, not gzip)
+    tar --zstd -xf packagesite.pkg
 
     log "Package URLs - plugin: $plugin_url binary: $binary_url"
 

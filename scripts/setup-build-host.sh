@@ -50,14 +50,23 @@ EOF
     
     chmod +x "$CRON_SCRIPT"
     
-    # Add cron job (daily at 2 AM)
-    local cron_line="0 2 * * * $CRON_SCRIPT"
+    # Add cron job (every 6 hours)
+    local cron_line="0 */6 * * * $CRON_SCRIPT"
     
     if crontab -l 2>/dev/null | grep -Fq "$CRON_SCRIPT"; then
         log "Cron job already exists"
     else
         (crontab -l 2>/dev/null || true; echo "$cron_line") | crontab -
         log "Cron job added: $cron_line"
+    fi
+    
+    # Ensure cron daemon is enabled on boot and running
+    sysrc cron_enable="YES"
+    if ! service cron status >/dev/null 2>&1; then
+        service cron start
+        log "Cron service started"
+    else
+        log "Cron service already running"
     fi
 }
 
@@ -114,7 +123,7 @@ main() {
     log "Next steps:"
     log "1. Run initial build: $REPO_DIR/scripts/build-and-release.sh"
     log "2. Configure routers with: scripts/setup-router-repo.sh"
-    log "3. Builds will run automatically daily at 2 AM"
+    log "3. Builds will run automatically every 6 hours"
 }
 
 main "$@"

@@ -8,7 +8,7 @@ OPNsense plugin for Cloudflare Tunnel (cloudflared) with automated FreeBSD packa
 
 - **Build Host**: freebsd-dev (FreeBSD 14.3) with native Go toolchain
 - **Build Script**: `scripts/build-and-release.sh` - automated package creation
-- **Execution**: Cron job checks for new cloudflared releases every 30 minutes
+- **Execution**: Cron job checks for new cloudflared releases every 6 hours
 - **Version Detection**: GitHub API monitoring for upstream cloudflare/cloudflared releases
 
 ### Package Structure
