@@ -34,10 +34,9 @@ type Tunnel struct {
 }
 
 // xmlRoot is used only to navigate to the cloudflared section.
-// Root must be a flat OPNsense element; a nested wrapper struct breaks
-// encoding/xml unmarshaling of <general> and <tunnels>.
+// Keep the root unconstrained so both <opnsense> and <OPNsense> variants
+// can be parsed without case-sensitive failures.
 type xmlRoot struct {
-	XMLName     xml.Name       `xml:"OPNsense"`
 	Cloudflared xmlCloudflared `xml:"cloudflared"`
 }
 
