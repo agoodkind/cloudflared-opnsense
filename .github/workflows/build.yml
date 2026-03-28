@@ -186,11 +186,11 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: auto
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6.0.2
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          token: ${{ github.token }}
           fetch-depth: 0
 
       - name: Download build artifacts
