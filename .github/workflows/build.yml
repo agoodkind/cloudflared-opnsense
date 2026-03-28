@@ -162,6 +162,11 @@ jobs:
               -pkg-repo-dir "${PKG_REPO_DIR}" \
               repo
 
+            # Sync generated repo metadata back into pkg/ so the artifact
+            # and the committed metadata are always in sync with the build.
+            mkdir -p "${REPO_DIR}/pkg"
+            cp -a "${PKG_REPO_DIR}/." "${REPO_DIR}/pkg/"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7.0.0
         with:
