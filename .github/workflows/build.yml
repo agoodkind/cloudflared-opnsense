@@ -233,6 +233,9 @@ jobs:
           PKG_CF="_artifact/pkg-repo-build/All/cloudflared-${VERSION}.pkg"
           PKG_OS="_artifact/pkg-repo-build/All/os-cloudflared-${PLUGIN_VER}.pkg"
 
+          if gh release view "${TAG}" &>/dev/null; then
+            gh release delete "${TAG}" --yes --cleanup-tag
+          fi
           gh release create "${TAG}" \
             --title "Cloudflared ${VERSION} FreeBSD (r${REVISION})" \
             --notes "FreeBSD amd64 packages for cloudflared ${VERSION}." \
