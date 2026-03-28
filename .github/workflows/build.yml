@@ -9,10 +9,6 @@ on:
         description: "Force rebuild even when upstream version unchanged"
         type: boolean
         default: false
-  push:
-    branches:
-      - main
-
 permissions:
   contents: write
 
@@ -120,8 +116,7 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck --severity=error \
             scripts/ci/upload-r2.sh \
-            scripts/ci/create-release.sh \
-            scripts/ci/commit-metadata.sh
+            scripts/ci/create-release.sh
 
   build:
     needs: [check, test]
@@ -177,33 +172,12 @@ jobs:
 
             # Run the Go builder for package + repo steps.
             "${REPO_DIR}/dist/cloudflared-builder" \
-              -version "${CF_VERSION}" \
-              -revision "${CF_REVISION}" \
-              -repo-dir "${REPO_DIR}" \
-              -work-dir "${WORK_DIR}" \
-              -pkg-repo-dir "${PKG_REPO_DIR}" \
-              package
-
-            "${REPO_DIR}/dist/cloudflared-builder" \
-              -version "${CF_VERSION}" \
-              -revision "${CF_REVISION}" \
-              -repo-dir "${REPO_DIR}" \
-              -work-dir "${WORK_DIR}" \
-              -pkg-repo-dir "${PKG_REPO_DIR}" \
-              repo
-
-            # Sync generated repo metadata back into pkg/ so the artifact
-            # and the committed metadata are always in sync with the build.
-            mkdir -p "${REPO_DIR}/pkg"
-            cp -a "${PKG_REPO_DIR}/." "${REPO_DIR}/pkg/"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7.0.0
         with:
           name: pkg-build
-          path: |
-            pkg-repo-build
-            pkg
+          path: pkg-repo-build
 
   publish:
     needs: [check, build]
@@ -240,8 +214,3 @@ jobs:
           REVISION: ${{ needs.check.outputs.revision }}
           ARTIFACT_DIR: _artifact
         run: bash scripts/ci/create-release.sh
-
-      - name: Commit pkg metadata to main
-        env:
-          ARTIFACT_DIR: _artifact
-        run: bash scripts/ci/commit-metadata.sh
