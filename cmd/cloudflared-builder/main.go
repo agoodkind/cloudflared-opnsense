@@ -21,6 +21,9 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -31,6 +34,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -397,27 +401,38 @@ func createBinaryPackage(cfVersion, repoDir string) error {
 	}
 
 	pkgMeta := filepath.Join(repoDir, "packages", "cloudflared")
-	for _, f := range []string{"+DESC", "+POST_INSTALL", "pkg-plist"} {
-		if err := copyFile(filepath.Join(pkgMeta, f), filepath.Join(staging, f), 0644); err != nil {
-			return err
-		}
-	}
 
 	manifest, err := os.ReadFile(filepath.Join(pkgMeta, "+MANIFEST"))
 	if err != nil {
 		return err
 	}
 	rendered := strings.ReplaceAll(string(manifest), "{{version}}", cfVersion)
-	if err := os.WriteFile(filepath.Join(staging, "+MANIFEST"), []byte(rendered), 0644); err != nil {
+
+	desc, err := os.ReadFile(filepath.Join(pkgMeta, "+DESC"))
+	if err != nil {
 		return err
 	}
 
-	if err := runCmd(staging, "pkg", "create", "-m", ".", "-r", ".", "-p", "pkg-plist",
-		"-o", filepath.Join(pkgRepoDir, "All")); err != nil {
-		return fmt.Errorf("pkg create (binary): %w", err)
+	plistPath := filepath.Join(pkgMeta, "pkg-plist")
+	scripts := map[string]string{}
+	postInstall := filepath.Join(pkgMeta, "+POST_INSTALL")
+	if data, err := os.ReadFile(postInstall); err == nil {
+		scripts["post-install"] = string(data)
 	}
 
-	pkgFile := filepath.Join(pkgRepoDir, "All", "cloudflared-"+cfVersion+".pkg")
+	outDir := filepath.Join(pkgRepoDir, "All")
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return err
+	}
+
+	pkgFile := filepath.Join(outDir, "cloudflared-"+cfVersion+".pkg")
+	if err := createPkgArchive(
+		pkgFile, staging, plistPath,
+		rendered, string(desc), scripts,
+	); err != nil {
+		return fmt.Errorf("create binary package: %w", err)
+	}
+
 	info, err := os.Stat(pkgFile)
 	if err != nil {
 		return fmt.Errorf("binary package not found: %s", pkgFile)
@@ -481,13 +496,7 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 		return err
 	}
 
-	// Package metadata.
 	pkgMeta := filepath.Join(repoDir, "packages", "os-cloudflared")
-	for _, f := range []string{"+DESC", "+POST_INSTALL", "+POST_DEINSTALL", "pkg-plist"} {
-		if err := copyFile(filepath.Join(pkgMeta, f), filepath.Join(staging, f), 0644); err != nil {
-			return err
-		}
-	}
 
 	manifest, err := os.ReadFile(filepath.Join(pkgMeta, "+MANIFEST"))
 	if err != nil {
@@ -497,20 +506,288 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 		"{{plugin_version}}", pkgVersion,
 		"{{version}}", cfVersion,
 	).Replace(string(manifest))
-	if err := os.WriteFile(filepath.Join(staging, "+MANIFEST"), []byte(rendered), 0644); err != nil {
+
+	desc, err := os.ReadFile(filepath.Join(pkgMeta, "+DESC"))
+	if err != nil {
 		return err
 	}
 
-	if err := runCmd(staging, "pkg", "create", "-m", ".", "-r", ".", "-p", "pkg-plist",
-		"-o", filepath.Join(pkgRepoDir, "All")); err != nil {
-		return fmt.Errorf("pkg create (plugin): %w", err)
+	plistPath := filepath.Join(pkgMeta, "pkg-plist")
+	scripts := map[string]string{}
+	for _, s := range []struct{ file, key string }{
+		{"+POST_INSTALL", "post-install"},
+		{"+POST_DEINSTALL", "post-deinstall"},
+	} {
+		if data, err := os.ReadFile(filepath.Join(pkgMeta, s.file)); err == nil {
+			scripts[s.key] = string(data)
+		}
 	}
 
-	pkgFile := filepath.Join(pkgRepoDir, "All", pkgName+".pkg")
+	outDir := filepath.Join(pkgRepoDir, "All")
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return err
+	}
+
+	pkgFile := filepath.Join(outDir, pkgName+".pkg")
+	if err := createPkgArchive(
+		pkgFile, staging, plistPath,
+		rendered, string(desc), scripts,
+	); err != nil {
+		return fmt.Errorf("create plugin package: %w", err)
+	}
+
 	if _, err := os.Stat(pkgFile); err != nil {
 		return fmt.Errorf("plugin package not found: %s", pkgFile)
 	}
 	logf("plugin package: %s", pkgFile)
+	return nil
+}
+
+// ---- pkg archive builder ---------------------------------------------------
+//
+// Builds FreeBSD .pkg archives directly in Go, producing the legacy
+// manifest format (simple hash strings for files, "y" for directories)
+// that is compatible with all pkg versions including OPNsense's pkg 2.x.
+// This avoids depending on the host's `pkg create`, which on newer
+// FreeBSD produces a detailed object format that older pkg segfaults on.
+
+// parsePlist reads a pkg-plist file and returns the list of regular file
+// paths (relative to prefix) and the list of @dir absolute paths.
+func parsePlist(path string) (files []string, dirs []string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "@dir ") {
+			dirs = append(dirs, strings.TrimSpace(line[5:]))
+		} else {
+			files = append(files, line)
+		}
+	}
+	return files, dirs, scanner.Err()
+}
+
+// sha256File computes the SHA256 hash of a file and returns it in the
+// FreeBSD pkg format: "1$<hex>".
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return "1$" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// parseUCLManifest does a minimal parse of UCL-format +MANIFEST files
+// into a map suitable for JSON serialization. It handles the subset of
+// UCL used by OPNsense plugin manifests (simple key: value pairs,
+// single-line arrays, no nested objects).
+func parseUCLManifest(ucl string) map[string]any {
+	m := make(map[string]any)
+	for _, line := range strings.Split(ucl, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		idx := strings.Index(line, ":")
+		if idx < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:idx])
+		val := strings.TrimSpace(line[idx+1:])
+		val = strings.Trim(val, "\"")
+
+		if strings.HasPrefix(val, "[") && strings.HasSuffix(val, "]") {
+			inner := val[1 : len(val)-1]
+			var arr []string
+			for _, item := range strings.Split(inner, ",") {
+				item = strings.TrimSpace(item)
+				item = strings.Trim(item, "\"")
+				if item != "" {
+					arr = append(arr, item)
+				}
+			}
+			m[key] = arr
+		} else {
+			m[key] = val
+		}
+	}
+	return m
+}
+
+// createPkgArchive builds a FreeBSD .pkg file (zstd-compressed tar)
+// from the staging directory and plist, using the legacy manifest format
+// compatible with OPNsense's pkg 2.x.
+func createPkgArchive(
+	outputPath string,
+	stagingDir string,
+	plistPath string,
+	manifestUCL string,
+	desc string,
+	scripts map[string]string,
+) error {
+	prefix := "/usr/local"
+	plistFiles, plistDirs, err := parsePlist(plistPath)
+	if err != nil {
+		return fmt.Errorf("parse plist: %w", err)
+	}
+
+	m := parseUCLManifest(manifestUCL)
+	if p, ok := m["prefix"].(string); ok && p != "" {
+		prefix = p
+	}
+
+	// Compute file hashes and total flatsize.
+	filesMap := make(map[string]string)
+	var flatsize int64
+	for _, relPath := range plistFiles {
+		absPath := prefix + "/" + relPath
+		diskPath := filepath.Join(stagingDir, absPath)
+		hash, err := sha256File(diskPath)
+		if err != nil {
+			return fmt.Errorf("hash %s: %w", relPath, err)
+		}
+		filesMap[absPath] = hash
+
+		info, err := os.Stat(diskPath)
+		if err != nil {
+			return fmt.Errorf("stat %s: %w", relPath, err)
+		}
+		flatsize += info.Size()
+	}
+
+	dirsMap := make(map[string]string)
+	for _, d := range plistDirs {
+		dirsMap[d] = "y"
+	}
+
+	m["flatsize"] = flatsize
+	m["files"] = filesMap
+	if len(dirsMap) > 0 {
+		m["directories"] = dirsMap
+	}
+	m["desc"] = strings.TrimRight(desc, "\n")
+	if len(scripts) > 0 {
+		m["scripts"] = scripts
+	}
+
+	// Detect ABI from the system if not already set.
+	if _, ok := m["abi"]; !ok {
+		m["abi"] = "FreeBSD:14:amd64"
+	}
+	if _, ok := m["arch"]; !ok {
+		m["arch"] = "freebsd:14:x86:64"
+	}
+
+	fullManifest, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshal manifest: %w", err)
+	}
+
+	// COMPACT_MANIFEST excludes files, directories, and scripts.
+	compact := make(map[string]any)
+	for k, v := range m {
+		if k != "files" && k != "directories" && k != "scripts" {
+			compact[k] = v
+		}
+	}
+	compactManifest, err := json.Marshal(compact)
+	if err != nil {
+		return fmt.Errorf("marshal compact manifest: %w", err)
+	}
+
+	// Build the tar archive.
+	out, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	zw, err := zstd.NewWriter(out, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
+	if err != nil {
+		return err
+	}
+	defer zw.Close()
+
+	tw := tar.NewWriter(zw)
+	defer tw.Close()
+
+	writeMeta := func(name string, data []byte) error {
+		hdr := &tar.Header{
+			Name: name,
+			Size: int64(len(data)),
+			Mode: 0644,
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		_, err := tw.Write(data)
+		return err
+	}
+
+	if err := writeMeta("+COMPACT_MANIFEST", compactManifest); err != nil {
+		return err
+	}
+	if err := writeMeta("+MANIFEST", fullManifest); err != nil {
+		return err
+	}
+
+	// Add files in sorted order (matching pkg create behavior).
+	sort.Strings(plistFiles)
+	for _, relPath := range plistFiles {
+		absPath := prefix + "/" + relPath
+		diskPath := filepath.Join(stagingDir, absPath)
+
+		info, err := os.Stat(diskPath)
+		if err != nil {
+			return err
+		}
+		hdr := &tar.Header{
+			Name: absPath,
+			Size: info.Size(),
+			Mode: int64(info.Mode()),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+
+		f, err := os.Open(diskPath)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(tw, f)
+		f.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+	}
+
+	// Add @dir entries as empty directory entries.
+	sort.Strings(plistDirs)
+	for _, d := range plistDirs {
+		hdr := &tar.Header{
+			Name:     d + "/",
+			Typeflag: tar.TypeDir,
+			Mode:     0755,
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

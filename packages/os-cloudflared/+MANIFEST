@@ -5,5 +5,6 @@ comment: OPNsense plugin for Cloudflare Tunnel
 maintainer: github.com/agoodkind
 www: https://github.com/agoodkind/cloudflared-opnsense
 prefix: /usr/local
+licenselogic: "single"
 categories: [net]
 licenses: [BSD2CLAUSE]
