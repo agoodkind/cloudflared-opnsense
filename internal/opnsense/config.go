@@ -34,10 +34,11 @@ type Tunnel struct {
 }
 
 // xmlRoot is used only to navigate to the cloudflared section.
+// Root must be a flat OPNsense element; a nested wrapper struct breaks
+// encoding/xml unmarshaling of <general> and <tunnels>.
 type xmlRoot struct {
-	OPNsense struct {
-		Cloudflared xmlCloudflared `xml:"cloudflared"`
-	} `xml:"OPNsense"`
+	XMLName     xml.Name       `xml:"OPNsense"`
+	Cloudflared xmlCloudflared `xml:"cloudflared"`
 }
 
 type xmlCloudflared struct {
@@ -93,7 +94,7 @@ func ReadSettings(path string) (*Settings, error) {
 		return nil, fmt.Errorf("parse config.xml: %w", err)
 	}
 
-	g := root.OPNsense.Cloudflared.General
+	g := root.Cloudflared.General
 
 	s := &Settings{
 		Enabled:       boolField(g.Enabled, "0"),
@@ -106,7 +107,7 @@ func ReadSettings(path string) (*Settings, error) {
 		LogLevel:      strField(g.LogLevel, "info"),
 	}
 
-	for _, t := range root.OPNsense.Cloudflared.Tunnels.Tunnel {
+	for _, t := range root.Cloudflared.Tunnels.Tunnel {
 		s.Tunnels = append(s.Tunnels, Tunnel{
 			UUID:     t.UUID,
 			Enabled:  boolField(t.Enabled, "1"),
