@@ -167,7 +167,9 @@ jobs:
         uses: actions/upload-artifact@v7.0.0
         with:
           name: pkg-build
-          path: pkg-repo-build
+          path: |
+            pkg-repo-build
+            pkg
 
   publish:
     needs: [check, build]
