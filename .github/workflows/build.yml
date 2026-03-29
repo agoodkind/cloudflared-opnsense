@@ -104,27 +104,15 @@ jobs:
             go build -buildvcs=false -o dist/cloudflared-builder ./cmd/cloudflared-builder
             go build -buildvcs=false -o dist/cloudflared-configd  ./cmd/cloudflared-configd
 
-            # Clone and patch cloudflared source.
-            cd "${WORK_DIR}"
-            git clone --depth 1 --branch "${CF_VERSION}" \
-              https://github.com/cloudflare/cloudflared.git
+            # Run the Go builder for deterministic build/package/repo steps.
+            "${REPO_DIR}/dist/cloudflared-builder" \
+              -version "${CF_VERSION}" \
+              -revision "${CF_REVISION}" \
+              -repo-dir "${REPO_DIR}" \
+              -work-dir "${WORK_DIR}" \
+              -pkg-repo-dir "${PKG_REPO_DIR}" \
+              build
 
-            sed -i '' 's/darwin || linux/darwin || linux || freebsd/g' \
-              cloudflared/diagnostic/network/collector_unix.go \
-              cloudflared/diagnostic/network/collector_unix_test.go \
-              2>/dev/null || true
-
-            if [ -f cloudflared/diagnostic/system_collector_linux.go ]; then
-              cp cloudflared/diagnostic/system_collector_linux.go \
-                cloudflared/diagnostic/system_collector_freebsd.go
-              sed -i '' 's/linux/freebsd/g' \
-                cloudflared/diagnostic/system_collector_freebsd.go
-            fi
-
-            cd cloudflared
-            gmake cloudflared
-
-            # Run the Go builder for package + repo steps.
             "${REPO_DIR}/dist/cloudflared-builder" \
               -version "${CF_VERSION}" \
               -revision "${CF_REVISION}" \
