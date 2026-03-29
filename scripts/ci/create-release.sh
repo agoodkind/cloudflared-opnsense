@@ -24,6 +24,24 @@ if ! [[ -f "${PKG_OS}" ]]; then
     exit 1
 fi
 
+# Abort if a higher revision for this version already exists.
+# This prevents a slow or retried run from re-publishing a stale revision as the "latest" release.
+HIGHEST_EXISTING="$(gh release list \
+    --repo agoodkind/cloudflared-opnsense \
+    --limit 100 \
+    --json tagName \
+    --jq ".[] | .tagName | select(startswith(\"${VERSION}-freebsd-r\"))" \
+    | sed "s/${VERSION}-freebsd-r//" \
+    | sort -n \
+    | tail -1)"
+HIGHEST_EXISTING="${HIGHEST_EXISTING:-0}"
+
+if [ "${HIGHEST_EXISTING}" -gt "${REVISION}" ]; then
+    echo "ERROR: r${HIGHEST_EXISTING} already published for ${VERSION};" \
+         "refusing to publish older r${REVISION}." >&2
+    exit 1
+fi
+
 if gh release view "${TAG}" &>/dev/null; then
     echo "Deleting existing release ${TAG}..."
     gh release delete "${TAG}" --yes --cleanup-tag

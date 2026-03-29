@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-# Pre-push hook — intentionally empty.
+# Pre-push hook. Intentionally empty.
 # Builds are handled by GitHub Actions CI on push to main.
 exit 0

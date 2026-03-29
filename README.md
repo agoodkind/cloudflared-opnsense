@@ -31,8 +31,8 @@ src/opnsense/
 
 Two packages are built per cloudflared upstream release:
 
-1. **`cloudflared-{version}.pkg`** (~17 MB) — upstream binary compiled for FreeBSD amd64
-2. **`os-cloudflared-{version}_{revision}.pkg`** (~few KB) — OPNsense plugin (UI, configd binary, rc.d)
+1. **`cloudflared-{version}.pkg`** (~17 MB): upstream binary compiled for FreeBSD amd64
+2. **`os-cloudflared-{version}_{revision}.pkg`** (~few KB): OPNsense plugin (UI, configd binary, rc.d)
 
 ### Distribution
 

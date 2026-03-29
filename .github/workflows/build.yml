@@ -20,76 +20,52 @@ jobs:
       version: ${{ steps.check.outputs.version }}
       revision: ${{ steps.check.outputs.revision }}
     steps:
-      - uses: actions/checkout@v6.0.2
-
-      - name: Restore build state
-        uses: actions/cache/restore@v5.0.4
-        with:
-          path: .cache/build-state
-          key: cloudflared-build-state
-
       - name: Decide version and revision
         id: check
         env:
           EVENT_NAME: ${{ github.event_name }}
           FORCE_INPUT: ${{ github.event_name == 'workflow_dispatch' && format('{0}', github.event.inputs.force) || 'false' }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          FORCE_INPUT="${FORCE_INPUT:-false}"
-          CACHE_DIR="${GITHUB_WORKSPACE}/.cache/build-state"
-          mkdir -p "${CACHE_DIR}"
 
           LATEST="$(curl -sL \
             https://api.github.com/repos/cloudflare/cloudflared/releases/latest \
             | jq -r .tag_name)"
 
-          LAST_VERSION=""
-          if [ -f "${CACHE_DIR}/last_version" ]; then
-            LAST_VERSION="$(tr -d '\n' < "${CACHE_DIR}/last_version")"
-          fi
-
-          LAST_REV=0
-          if [ -f "${CACHE_DIR}/last_revision" ]; then
-            LAST_REV="$(tr -d '\n' < "${CACHE_DIR}/last_revision")"
-          fi
-
           FORCE="false"
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_INPUT}" = "true" ]; then
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_INPUT:-false}" = "true" ]; then
             FORCE="true"
           fi
 
-          SKIP="false"
-          if [ "${EVENT_NAME}" = "schedule" ] \
-            && [ "${LATEST}" = "${LAST_VERSION}" ] \
-            && [ "${FORCE}" != "true" ]; then
-            SKIP="true"
-          fi
+          # Derive the highest published revision for this upstream version
+          # directly from GitHub release tags, which are the authoritative source of truth.
+          LAST_REV="$(gh release list \
+            --repo agoodkind/cloudflared-opnsense \
+            --limit 100 \
+            --json tagName \
+            --jq ".[] | .tagName | select(startswith(\"${LATEST}-freebsd-r\"))" \
+            | sed "s/${LATEST}-freebsd-r//" \
+            | sort -n \
+            | tail -1)"
+          LAST_REV="${LAST_REV:-0}"
 
-          if [ "${SKIP}" = "true" ]; then
+          # Skip on schedule when already up-to-date and not forced.
+          if [ "${EVENT_NAME}" = "schedule" ] \
+            && [ "${LAST_REV}" -gt 0 ] \
+            && [ "${FORCE}" != "true" ]; then
             echo "skip=true" >> "${GITHUB_OUTPUT}"
             echo "version=" >> "${GITHUB_OUTPUT}"
             echo "revision=" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
-          REV=1
-          if [ -n "${LAST_VERSION}" ] && [ "${LATEST}" = "${LAST_VERSION}" ]; then
-            REV=$((LAST_REV + 1))
-          fi
+          REV=$((LAST_REV + 1))
 
           echo "skip=false" >> "${GITHUB_OUTPUT}"
           echo "version=${LATEST}" >> "${GITHUB_OUTPUT}"
           echo "revision=${REV}" >> "${GITHUB_OUTPUT}"
-
-          printf '%s\n' "${LATEST}" > "${CACHE_DIR}/last_version"
-          printf '%s\n' "${REV}" > "${CACHE_DIR}/last_revision"
-
-      - name: Save build state
-        if: steps.check.outputs.skip != 'true'
-        uses: actions/cache/save@v5.0.4
-        with:
-          path: .cache/build-state
-          key: cloudflared-build-state
+          echo "Upstream: ${LATEST}  Last published revision: ${LAST_REV}  Building: r${REV}"
 
   test:
     runs-on: ubuntu-latest
@@ -172,6 +148,20 @@ jobs:
 
             # Run the Go builder for package + repo steps.
             "${REPO_DIR}/dist/cloudflared-builder" \
+              -version "${CF_VERSION}" \
+              -revision "${CF_REVISION}" \
+              -repo-dir "${REPO_DIR}" \
+              -work-dir "${WORK_DIR}" \
+              -pkg-repo-dir "${PKG_REPO_DIR}" \
+              package
+
+            "${REPO_DIR}/dist/cloudflared-builder" \
+              -version "${CF_VERSION}" \
+              -revision "${CF_REVISION}" \
+              -repo-dir "${REPO_DIR}" \
+              -work-dir "${WORK_DIR}" \
+              -pkg-repo-dir "${PKG_REPO_DIR}" \
+              repo
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7.0.0
