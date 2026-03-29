@@ -4,11 +4,6 @@ on:
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
-    inputs:
-      force:
-        description: "Force rebuild even when upstream version unchanged"
-        type: boolean
-        default: false
 permissions:
   contents: write
 
@@ -23,8 +18,6 @@ jobs:
       - name: Decide version and revision
         id: check
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          FORCE_INPUT: ${{ github.event_name == 'workflow_dispatch' && format('{0}', github.event.inputs.force) || 'false' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
@@ -32,11 +25,6 @@ jobs:
           LATEST="$(curl -sL \
             https://api.github.com/repos/cloudflare/cloudflared/releases/latest \
             | jq -r .tag_name)"
-
-          FORCE="false"
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_INPUT:-false}" = "true" ]; then
-            FORCE="true"
-          fi
 
           # Derive the highest published revision for this upstream version
           # directly from GitHub release tags, which are the authoritative source of truth.
@@ -49,16 +37,6 @@ jobs:
             | sort -n \
             | tail -1)"
           LAST_REV="${LAST_REV:-0}"
-
-          # Skip on schedule when already up-to-date and not forced.
-          if [ "${EVENT_NAME}" = "schedule" ] \
-            && [ "${LAST_REV}" -gt 0 ] \
-            && [ "${FORCE}" != "true" ]; then
-            echo "skip=true" >> "${GITHUB_OUTPUT}"
-            echo "version=" >> "${GITHUB_OUTPUT}"
-            echo "revision=" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
 
           REV=$((LAST_REV + 1))
 

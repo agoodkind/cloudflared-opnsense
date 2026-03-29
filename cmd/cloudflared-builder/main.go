@@ -327,8 +327,15 @@ func buildCloudflared(version string) error {
 		return fmt.Errorf("patch: %w", err)
 	}
 
+	buildDate, err := cloudflaredBuildDate(srcDir)
+	if err != nil {
+		return fmt.Errorf("derive build date: %w", err)
+	}
+
 	logf("compiling")
-	if err := runCmd(srcDir, "gmake", "cloudflared"); err != nil {
+	if err := runCmdWithEnv(srcDir, map[string]string{
+		"DATE": buildDate,
+	}, "gmake", "cloudflared"); err != nil {
 		return fmt.Errorf("gmake: %w", err)
 	}
 
@@ -340,6 +347,22 @@ func buildCloudflared(version string) error {
 	info, _ := os.Stat(binPath)
 	logf("build complete: cloudflared %d bytes", info.Size())
 	return nil
+}
+
+func cloudflaredBuildDate(srcDir string) (string, error) {
+	raw, err := exec.Command(
+		"git", "-C", srcDir, "show", "-s", "--format=%cI", "HEAD",
+	).Output()
+	if err != nil {
+		return "", fmt.Errorf("git show: %w", err)
+	}
+
+	commitTime, err := time.Parse(time.RFC3339, strings.TrimSpace(string(raw)))
+	if err != nil {
+		return "", fmt.Errorf("parse commit timestamp: %w", err)
+	}
+
+	return commitTime.UTC().Format("2006-01-02-15:04 UTC"), nil
 }
 
 // patchFreeBSD applies the minimal sed substitutions that make cloudflared
@@ -1177,6 +1200,23 @@ func runCmd(dir string, name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func runCmdWithEnv(dir string, env map[string]string, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = append(os.Environ(), envToPairs(env)...)
+	return cmd.Run()
+}
+
+func envToPairs(values map[string]string) []string {
+	pairs := make([]string, 0, len(values))
+	for key, value := range values {
+		pairs = append(pairs, fmt.Sprintf("%s=%s", key, value))
+	}
+	return pairs
 }
 
 func logf(format string, args ...any) {
