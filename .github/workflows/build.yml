@@ -4,11 +4,7 @@ on:
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
-    inputs:
-      force:
-        description: "Force rebuild even when upstream version unchanged"
-        type: boolean
-        default: false
+  pull_request:
 permissions:
   contents: write
 
@@ -16,15 +12,12 @@ jobs:
   check:
     runs-on: ubuntu-latest
     outputs:
-      skip: ${{ steps.check.outputs.skip }}
       version: ${{ steps.check.outputs.version }}
       revision: ${{ steps.check.outputs.revision }}
     steps:
       - name: Decide version and revision
         id: check
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          FORCE_INPUT: ${{ github.event_name == 'workflow_dispatch' && format('{0}', github.event.inputs.force) || 'false' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
@@ -32,11 +25,6 @@ jobs:
           LATEST="$(curl -sL \
             https://api.github.com/repos/cloudflare/cloudflared/releases/latest \
             | jq -r .tag_name)"
-
-          FORCE="false"
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_INPUT:-false}" = "true" ]; then
-            FORCE="true"
-          fi
 
           # Derive the highest published revision for this upstream version
           # directly from GitHub release tags, which are the authoritative source of truth.
@@ -50,19 +38,8 @@ jobs:
             | tail -1)"
           LAST_REV="${LAST_REV:-0}"
 
-          # Skip on schedule when already up-to-date and not forced.
-          if [ "${EVENT_NAME}" = "schedule" ] \
-            && [ "${LAST_REV}" -gt 0 ] \
-            && [ "${FORCE}" != "true" ]; then
-            echo "skip=true" >> "${GITHUB_OUTPUT}"
-            echo "version=" >> "${GITHUB_OUTPUT}"
-            echo "revision=" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
           REV=$((LAST_REV + 1))
 
-          echo "skip=false" >> "${GITHUB_OUTPUT}"
           echo "version=${LATEST}" >> "${GITHUB_OUTPUT}"
           echo "revision=${REV}" >> "${GITHUB_OUTPUT}"
           echo "Upstream: ${LATEST}  Last published revision: ${LAST_REV}  Building: r${REV}"
@@ -96,7 +73,6 @@ jobs:
 
   build:
     needs: [check, test]
-    if: needs.check.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6.0.2
@@ -126,27 +102,15 @@ jobs:
             go build -buildvcs=false -o dist/cloudflared-builder ./cmd/cloudflared-builder
             go build -buildvcs=false -o dist/cloudflared-configd  ./cmd/cloudflared-configd
 
-            # Clone and patch cloudflared source.
-            cd "${WORK_DIR}"
-            git clone --depth 1 --branch "${CF_VERSION}" \
-              https://github.com/cloudflare/cloudflared.git
+            # Run the Go builder for deterministic build/package/repo steps.
+            "${REPO_DIR}/dist/cloudflared-builder" \
+              -version "${CF_VERSION}" \
+              -revision "${CF_REVISION}" \
+              -repo-dir "${REPO_DIR}" \
+              -work-dir "${WORK_DIR}" \
+              -pkg-repo-dir "${PKG_REPO_DIR}" \
+              build
 
-            sed -i '' 's/darwin || linux/darwin || linux || freebsd/g' \
-              cloudflared/diagnostic/network/collector_unix.go \
-              cloudflared/diagnostic/network/collector_unix_test.go \
-              2>/dev/null || true
-
-            if [ -f cloudflared/diagnostic/system_collector_linux.go ]; then
-              cp cloudflared/diagnostic/system_collector_linux.go \
-                cloudflared/diagnostic/system_collector_freebsd.go
-              sed -i '' 's/linux/freebsd/g' \
-                cloudflared/diagnostic/system_collector_freebsd.go
-            fi
-
-            cd cloudflared
-            gmake cloudflared
-
-            # Run the Go builder for package + repo steps.
             "${REPO_DIR}/dist/cloudflared-builder" \
               -version "${CF_VERSION}" \
               -revision "${CF_REVISION}" \
@@ -174,8 +138,8 @@ jobs:
   publish:
     needs: [check, build]
     if: >-
-      needs.check.outputs.skip != 'true' &&
-      needs.build.result == 'success'
+      needs.build.result == 'success' &&
+      github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
