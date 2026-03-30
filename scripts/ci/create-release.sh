@@ -30,8 +30,22 @@ package_manifest_sha256() {
     local file="$1"
 
     tar --zstd --extract --to-stdout --file "$file" "+MANIFEST" \
-        | jq -S 'del(.version, .product_version, ."\"product_version\"", .files["/usr/local/opnsense/version/cloudflared"])' \
-        | sha256sum | awk '{print $1}'
+        | jq -S '
+            with_entries(
+              select(
+                ((.key
+                  | gsub("\""; "")
+                  | gsub(","; "")
+                ) as $normalized_key
+                  | $normalized_key != "product_version"
+                  and $normalized_key != "version")
+                and .key != "files"
+              )
+            )
+            | del(.files["/usr/local/opnsense/version/cloudflared"])
+        ' \
+        | sha256sum \
+        | awk '{print $1}'
 }
 
 release_sha256() {

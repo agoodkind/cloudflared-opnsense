@@ -11,7 +11,6 @@ jobs:
   check:
     runs-on: ubuntu-latest
     outputs:
-      skip: ${{ steps.check.outputs.skip }}
       version: ${{ steps.check.outputs.version }}
       revision: ${{ steps.check.outputs.revision }}
     steps:
@@ -40,7 +39,6 @@ jobs:
 
           REV=$((LAST_REV + 1))
 
-          echo "skip=false" >> "${GITHUB_OUTPUT}"
           echo "version=${LATEST}" >> "${GITHUB_OUTPUT}"
           echo "revision=${REV}" >> "${GITHUB_OUTPUT}"
           echo "Upstream: ${LATEST}  Last published revision: ${LAST_REV}  Building: r${REV}"
@@ -74,7 +72,6 @@ jobs:
 
   build:
     needs: [check, test]
-    if: needs.check.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6.0.2
@@ -139,9 +136,7 @@ jobs:
 
   publish:
     needs: [check, build]
-    if: >-
-      needs.check.outputs.skip != 'true' &&
-      needs.build.result == 'success'
+    if: needs.build.result == 'success'
     runs-on: ubuntu-latest
     env:
       CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}

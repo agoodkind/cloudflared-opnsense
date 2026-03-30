@@ -333,9 +333,7 @@ func buildCloudflared(version string) error {
 	}
 
 	logf("compiling")
-	if err := runCmdWithEnv(srcDir, map[string]string{
-		"DATE": buildDate,
-	}, "gmake", "cloudflared"); err != nil {
+	if err := runCmdWithEnv(srcDir, map[string]string{}, "gmake", "DATE="+buildDate, "cloudflared"); err != nil {
 		return fmt.Errorf("gmake: %w", err)
 	}
 
