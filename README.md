@@ -1,6 +1,6 @@
 # Cloudflared OPNsense Plugin
 
-OPNsense plugin for Cloudflare Tunnel (`cloudflared`) with automated FreeBSD package building and distribution.
+OPNsense plugin for Cloudflare Tunnel (`cloudflared`) with automated FreeBSD package building and distribution via GitHub Actions and Cloudflare R2.
 
 ## Architecture
 
@@ -10,8 +10,8 @@ All backend logic is written in Go. There are no Python scripts or shell scripts
 
 | Binary | Where it runs | Purpose |
 |---|---|---|
-| `cloudflared-configd` | OPNsense router | Reads `config.xml`, writes `rc.conf.d/cloudflared`, writes token or `config.yml`, starts/stops service. Called by configd. |
-| `cloudflared-builder` | freebsd-dev build host | Clones cloudflared source, applies FreeBSD patches, builds, packages, creates GitHub release, updates pkg repo metadata. |
+| `cloudflared-configd` | OPNsense router (FreeBSD amd64) | Reads `config.xml`, writes `rc.conf.d/cloudflared`, writes token or `config.yml`, starts/stops service. Called by configd. |
+| `cloudflared-builder` | GitHub Actions (FreeBSD VM via `vmactions/freebsd-vm`) | Clones cloudflared source, applies FreeBSD patches, builds, packages, and writes pkg repo metadata. |
 
 ### OPNsense Plugin Layout
 
@@ -36,113 +36,125 @@ Two packages are built per cloudflared upstream release:
 
 ### Distribution
 
-- Metadata served from freebsd-dev via nginx: `https://cloudflared-opnsense-pkg.goodkind.io`
-- Package downloads: GitHub releases with tags like `2026.3.0-freebsd-r1`
-- Repository metadata committed to `pkg/` in this repo as a backup
+Packages and pkg repository metadata are uploaded to **Cloudflare R2** by CI. Tagged GitHub releases provide a secondary download channel.
+
+| Channel | Purpose |
+|---|---|
+| Cloudflare R2 bucket | Primary pkg repository served to routers (referenced in `/usr/local/etc/pkg/repos/`). |
+| GitHub releases | Tagged like `2026.3.0-freebsd-r1`. Contains the same artifacts as a backup and audit trail. |
+
+The legacy `cloudflared-opnsense-pkg.goodkind.io` nginx host on `freebsd-dev` is no longer in use.
 
 ## Prerequisites
 
-### Build host (freebsd-dev)
+### Development machine (macOS or Linux)
 
-- FreeBSD 14.3+, Go 1.21+, gmake, git, `gh` CLI authenticated, `pkg` tools, tar with zstd
+- Go 1.21+ (matching `go.mod`)
+- For BSD-make targets locally: `brew install bmake` (macOS `/usr/bin/make` is GNU make and does not parse `Mk/plugins.mk`)
 
-### Development machine (macOS)
+### CI runtime
 
-- Go 1.21+
+GitHub Actions provides everything else. No persistent build host is required.
 
 ## Building
 
+### Local development
+
 ```bash
-# Build Go binaries for local platform (dev/test)
+# Build Go binaries for the host platform (dev/test).
 make build
 
-# Cross-compile for FreeBSD amd64 (production)
+# Cross-compile both binaries for FreeBSD amd64.
+# This is what CI uses as the test gate before paying for the FreeBSD VM step.
 make freebsd
 
-# Run go vet
+# Lint and format.
 make lint
-
-# Format Go source
 make fmt
 ```
 
-On macOS, `/usr/bin/make` is GNU make and does not parse the BSD `.include` used by OPNsense `Mk/plugins.mk`. Use Homebrew `bmake` (`brew install bmake`) and run `bmake build`, or invoke `go build` on the `cmd/` packages directly.
+### CI build pipeline
 
-## Build Pipeline
+`.github/workflows/build.yml` runs on:
 
-The one-shot pipeline on freebsd-dev:
+- Cron every 6 hours (polls upstream for new cloudflared releases)
+- `workflow_dispatch` (manual trigger)
+- Every PR (test + build, no publish)
+
+Stages:
+
+1. **`check`** (Ubuntu): Queries the GitHub API for the latest cloudflared release. Derives the next FreeBSD revision number from existing release tags. No persistent state.
+2. **`test`** (Ubuntu): `go vet`, `go test -race`, cross-compile for FreeBSD as a build gate, shellcheck on CI scripts.
+3. **`build`** (Ubuntu host with `vmactions/freebsd-vm@v1.4.3` running FreeBSD 14.2): Builds `cloudflared-builder` and `cloudflared-configd` natively in the FreeBSD VM. Runs the builder's `build`, `package`, and `repo` subcommands to produce pkg(8) packages.
+4. **`publish`** (Ubuntu, skipped on PRs): Uploads packages and metadata to R2 via `scripts/ci/upload-r2.sh`. Cuts a tagged GitHub release via `scripts/ci/create-release.sh`.
+
+### Builder binary subcommands (run inside the FreeBSD VM in CI)
 
 ```bash
-# Via cron (every 6 hours) or manually:
-./scripts/build-and-release.sh
-
-# Force rebuild even if version unchanged:
-./scripts/build-and-release.sh --force
-
-# Subcommands via the Go binary directly:
-./dist/cloudflared-builder check           # Is a new version available?
-./dist/cloudflared-builder build           # Clone + patch + compile
-./dist/cloudflared-builder package         # Create pkg(8) packages
-./dist/cloudflared-builder repo            # Regenerate pkg repository index
-./dist/cloudflared-builder publish         # GitHub release + push metadata
-./dist/cloudflared-builder run             # All of the above
-./dist/cloudflared-builder -force run      # Force rebuild with incremented revision
+./dist/cloudflared-builder check      # Is a new version available?
+./dist/cloudflared-builder build      # Clone + patch + compile.
+./dist/cloudflared-builder package    # Create pkg(8) packages.
+./dist/cloudflared-builder repo       # Regenerate pkg repository index.
+./dist/cloudflared-builder run        # All of the above.
+./dist/cloudflared-builder -force run # Force rebuild with incremented revision.
 ```
+
+These can also be invoked locally on a FreeBSD host for debugging, but the canonical path is the GHA workflow.
 
 ## Deploying to OPNsense (Development Iteration)
 
+For pushing a freshly-built binary to a running router during development:
+
 ```bash
-# Deploy compiled plugin to a running router (set ROUTER= to your router's IPv6)
 make deploy-live ROUTER=3d06:bad:b01::1
 ```
 
-Staging for packaging uses OPNsense `make install` / `make metadata` with `DESTDIR` (see top-level `Makefile` and `Mk/plugins.mk`); CI runs those via `cloudflared-builder package` on FreeBSD.
+This calls `make freebsd` first, then scps the binary, rc.d script, and MVC tree to the router.
+
+For production deployment, install the published pkg from the R2 repository via OPNsense's plugin manager.
 
 ## configd binary usage on OPNsense
 
 ```bash
-# Called automatically by configd on settings save; can also be called manually:
+# Called automatically by configd on settings save. Can also be called manually:
 /usr/local/bin/cloudflared-configd reconfigure
 /usr/local/bin/cloudflared-configd status
 /usr/local/bin/cloudflared-configd version
 /usr/local/bin/cloudflared-configd is-enabled  # exits 0 if enabled, 1 otherwise
 ```
 
-## State Files (on freebsd-dev)
-
-| File | Contents |
-|---|---|
-| `/var/db/cloudflared-build-state` | Last successfully built cloudflared version |
-| `/var/db/cloudflared-revision` | FreeBSD revision number for that version |
-
 ## Troubleshooting
 
-**Check build log:**
+**Check most recent CI run:**
 
 ```bash
-ssh root@freebsd-dev "tail -50 /var/log/cloudflared-build.log"
+gh run list --repo agoodkind/cloudflared-opnsense --limit 5
+gh run view <run-id> --log
 ```
 
-**Inspect state:**
+**Check published packages:**
 
 ```bash
-ssh root@freebsd-dev "cat /var/db/cloudflared-build-state /var/db/cloudflared-revision"
+gh release list --repo agoodkind/cloudflared-opnsense --limit 5
 ```
 
-**Check packages:**
+**Check R2 repo metadata:**
 
 ```bash
-ssh root@freebsd-dev "ls -lh /var/tmp/cloudflared-repo/All/"
+# Replace with the actual R2 public URL once configured.
+curl -s https://<r2-public-host>/packagesite.yaml | jq .
 ```
 
-**Check repo metadata:**
-
-```bash
-curl -s https://cloudflared-opnsense-pkg.goodkind.io/packagesite.yaml | jq .
-```
-
-**Verify configd binary works:**
+**Verify configd binary on a router:**
 
 ```bash
 ssh agoodkind@3d06:bad:b01::1 '/usr/local/bin/cloudflared-configd version'
+```
+
+**Reproduce the FreeBSD build locally without CI:**
+
+```bash
+# On a FreeBSD 14.x host with go + gmake + git:
+go build -o dist/cloudflared-builder ./cmd/cloudflared-builder
+./dist/cloudflared-builder -version <version> -revision <rev> build
 ```
