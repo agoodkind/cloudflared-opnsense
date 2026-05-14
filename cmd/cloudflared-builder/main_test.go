@@ -108,6 +108,53 @@ func parseNDJSON(t *testing.T, s string) []map[string]any {
 	return out
 }
 
+func Test_parseUCLManifest(t *testing.T) {
+	t.Parallel()
+
+	ucl := `name: os-cloudflared
+version: "2026.3.0_1"
+origin: opnsense/os-cloudflared
+categories: [ "net" ]
+www: "https://goodkind.io"
+annotations {
+    "product_email": "alex@goodkind.io",
+    "product_id": "os-cloudflared",
+    "product_name": "cloudflared",
+    "product_website": "https://goodkind.io"
+}
+`
+
+	manifest := parseUCLManifest(ucl)
+	if manifest["name"] != "os-cloudflared" {
+		t.Fatalf("name = %v", manifest["name"])
+	}
+	if manifest["www"] != "https://goodkind.io" {
+		t.Fatalf("www = %v", manifest["www"])
+	}
+
+	categories, ok := manifest["categories"].([]string)
+	if !ok {
+		t.Fatalf("categories type = %T", manifest["categories"])
+	}
+	if len(categories) != 1 || categories[0] != "net" {
+		t.Fatalf("categories = %v", categories)
+	}
+
+	annotations, ok := manifest["annotations"].(map[string]string)
+	if !ok {
+		t.Fatalf("annotations type = %T", manifest["annotations"])
+	}
+	if annotations["product_email"] != "alex@goodkind.io" {
+		t.Fatalf("product_email = %q", annotations["product_email"])
+	}
+	if annotations["product_id"] != "os-cloudflared" {
+		t.Fatalf("product_id = %q", annotations["product_id"])
+	}
+	if _, exists := manifest["product_email"]; exists {
+		t.Fatalf("product_email should not be top-level: %v", manifest)
+	}
+}
+
 func Test_patchPackageSite(t *testing.T) {
 	t.Parallel()
 

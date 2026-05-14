@@ -630,21 +630,35 @@ func sha256File(path string) (string, error) {
 
 // parseUCLManifest does a minimal parse of UCL-format +MANIFEST files
 // into a map suitable for JSON serialization. It handles the subset of
-// UCL used by OPNsense plugin manifests (simple key: value pairs,
-// single-line arrays, no nested objects).
+// UCL used by OPNsense plugin manifests: simple key/value pairs,
+// single-line arrays, and the generated annotations JSON object.
 func parseUCLManifest(ucl string) map[string]any {
 	m := make(map[string]any)
-	for _, line := range strings.Split(ucl, "\n") {
-		line = strings.TrimSpace(line)
+	lines := strings.Split(ucl, "\n")
+	for lineIndex := 0; lineIndex < len(lines); lineIndex++ {
+		line := strings.TrimSpace(lines[lineIndex])
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+
+		if strings.HasPrefix(line, "annotations") {
+			annotations, nextLineIndex, ok := parseAnnotationsBlock(lines, lineIndex)
+			if ok {
+				m["annotations"] = annotations
+				lineIndex = nextLineIndex
+				continue
+			}
+		}
+
 		idx := strings.Index(line, ":")
 		if idx < 0 {
 			continue
 		}
 		key := strings.TrimSpace(line[:idx])
+		key = strings.Trim(key, "\"")
 		val := strings.TrimSpace(line[idx+1:])
+		val = strings.TrimSuffix(val, ",")
+		val = strings.TrimSpace(val)
 		val = strings.Trim(val, "\"")
 
 		if strings.HasPrefix(val, "[") && strings.HasSuffix(val, "]") {
@@ -663,6 +677,36 @@ func parseUCLManifest(ucl string) map[string]any {
 		}
 	}
 	return m
+}
+
+func parseAnnotationsBlock(lines []string, startLineIndex int) (map[string]string, int, bool) {
+	line := strings.TrimSpace(lines[startLineIndex])
+	bodyStart := strings.TrimSpace(strings.TrimPrefix(line, "annotations"))
+	if !strings.HasPrefix(bodyStart, "{") {
+		return nil, startLineIndex, false
+	}
+
+	var body strings.Builder
+	braceDepth := 0
+	for lineIndex := startLineIndex; lineIndex < len(lines); lineIndex++ {
+		blockLine := strings.TrimSpace(lines[lineIndex])
+		if lineIndex == startLineIndex {
+			blockLine = bodyStart
+		}
+		body.WriteString(blockLine)
+		body.WriteString("\n")
+		braceDepth += strings.Count(blockLine, "{")
+		braceDepth -= strings.Count(blockLine, "}")
+		if braceDepth == 0 {
+			annotations := make(map[string]string)
+			if err := json.Unmarshal([]byte(body.String()), &annotations); err != nil {
+				return nil, startLineIndex, false
+			}
+			return annotations, lineIndex, true
+		}
+	}
+
+	return nil, startLineIndex, false
 }
 
 func plistAbsPath(prefix, entry string) string {
@@ -884,7 +928,7 @@ func updatePkgRepository(cfVersion string, revision int) error {
 
 	pluginURL := repoBaseURL + "/" + pluginPkgName + ".pkg"
 	binaryURL := repoBaseURL + "/" + binaryPkgName + ".pkg"
-	logf("package URLs -- plugin: %s  binary: %s", pluginURL, binaryURL)
+	logf("package URLs: plugin: %s  binary: %s", pluginURL, binaryURL)
 
 	// Patch each NDJSON line.
 	updated, err := patchPackageSite(pkgsiteYAML, pkgVersion, cfVersion, pluginURL, binaryURL)
