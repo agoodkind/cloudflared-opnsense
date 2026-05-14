@@ -93,6 +93,8 @@ jobs:
             WORK_DIR="${GITHUB_WORKSPACE}/.cache/cf-build"
             PKG_REPO_DIR="${GITHUB_WORKSPACE}/pkg-repo-build"
 
+            git config --global --add safe.directory "${REPO_DIR}"
+
             rm -rf "${WORK_DIR}" "${PKG_REPO_DIR}"
             mkdir -p "${WORK_DIR}" "${PKG_REPO_DIR}/All"
 

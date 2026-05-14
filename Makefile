@@ -18,8 +18,8 @@ PLUGIN_NAME=		cloudflared
 PLUGIN_VERSION?=	2026.3.0
 PLUGIN_REVISION?=	0
 PLUGIN_COMMENT=		OPNsense plugin for Cloudflare Tunnel
-PLUGIN_MAINTAINER=	agoodkind@users.noreply.github.com
-PLUGIN_WWW=		https://github.com/agoodkind/cloudflared-opnsense
+PLUGIN_MAINTAINER=	alex@goodkind.io
+PLUGIN_WWW=		https://goodkind.io
 PLUGIN_LICENSE=		BSD2CLAUSE
 
 # Vendored Mk/; opnsense-scripts/ and opnsense-templates/ (see Mk/defaults.mk).
