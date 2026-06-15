@@ -47,9 +47,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
@@ -75,10 +75,10 @@ jobs:
     needs: [check, test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - name: Build in FreeBSD VM
-        uses: vmactions/freebsd-vm@v1.4.3
+        uses: vmactions/freebsd-vm@v1.4.6
         with:
           release: "14.2"
           usesh: true
@@ -130,7 +130,7 @@ jobs:
               repo
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v7.0.0
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: pkg-build
           path: |
@@ -150,7 +150,7 @@ jobs:
       AWS_DEFAULT_REGION: auto
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
         with:
           token: ${{ github.token }}
           fetch-depth: 0
