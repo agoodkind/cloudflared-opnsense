@@ -1,9 +1,11 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -153,6 +155,134 @@ annotations {
 	if _, exists := manifest["product_email"]; exists {
 		t.Fatalf("product_email should not be top-level: %v", manifest)
 	}
+}
+
+func TestCreatePkgArchiveUsesLegacyManifestLayout(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	stagingDir := filepath.Join(tempDir, "staging")
+	binDir := filepath.Join(stagingDir, "usr", "local", "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "cloudflared"), []byte("binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	plistPath := filepath.Join(tempDir, "plist")
+	if err := os.WriteFile(plistPath, []byte("/usr/local/bin/cloudflared\n@dir /usr/local/etc/cloudflared\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	outputPath := filepath.Join(tempDir, "cloudflared.pkg")
+	manifest := strings.Join([]string{
+		"name: os-cloudflared",
+		"version: \"2026.6.0_1\"",
+		"origin: opnsense/os-cloudflared",
+		"prefix: /usr/local",
+		"categories: [ \"net\" ]",
+		"",
+	}, "\n")
+	scripts := map[string]string{"post-install": "#!/bin/sh\necho ok\n"}
+
+	if err := createPkgArchive(outputPath, stagingDir, plistPath, manifest, "desc\n", scripts); err != nil {
+		t.Fatalf("createPkgArchive: %v", err)
+	}
+
+	manifestBody, compactManifestBody := readPkgManifestFiles(t, outputPath)
+
+	var full map[string]any
+	if err := json.Unmarshal(manifestBody, &full); err != nil {
+		t.Fatalf("unmarshal +MANIFEST: %v", err)
+	}
+	files, ok := full["files"].(map[string]any)
+	if !ok {
+		t.Fatalf("files type = %T", full["files"])
+	}
+	hashValue, ok := files["/usr/local/bin/cloudflared"].(string)
+	if !ok {
+		t.Fatalf("hash value type = %T", files["/usr/local/bin/cloudflared"])
+	}
+	if !strings.HasPrefix(hashValue, "1$") {
+		t.Fatalf("hash value = %q, want legacy 1$ prefix", hashValue)
+	}
+
+	directories, ok := full["directories"].(map[string]any)
+	if !ok {
+		t.Fatalf("directories type = %T", full["directories"])
+	}
+	if directories["/usr/local/etc/cloudflared"] != "y" {
+		t.Fatalf("directory marker = %v, want y", directories["/usr/local/etc/cloudflared"])
+	}
+
+	if _, ok := full["scripts"].(map[string]any); !ok {
+		t.Fatalf("scripts type = %T", full["scripts"])
+	}
+
+	var compact map[string]any
+	if err := json.Unmarshal(compactManifestBody, &compact); err != nil {
+		t.Fatalf("unmarshal +COMPACT_MANIFEST: %v", err)
+	}
+	if _, exists := compact["files"]; exists {
+		t.Fatalf("compact manifest unexpectedly contains files: %v", compact)
+	}
+	if _, exists := compact["directories"]; exists {
+		t.Fatalf("compact manifest unexpectedly contains directories: %v", compact)
+	}
+	if _, exists := compact["scripts"]; exists {
+		t.Fatalf("compact manifest unexpectedly contains scripts: %v", compact)
+	}
+}
+
+func readPkgManifestFiles(t *testing.T, pkgPath string) ([]byte, []byte) {
+	t.Helper()
+
+	pkgData, err := os.ReadFile(pkgPath)
+	if err != nil {
+		t.Fatalf("read pkg: %v", err)
+	}
+	decoder, err := zstd.NewReader(bytes.NewReader(pkgData))
+	if err != nil {
+		t.Fatalf("zstd reader: %v", err)
+	}
+	defer decoder.Close()
+
+	tarReader := tar.NewReader(decoder)
+	var manifestBody []byte
+	var compactManifestBody []byte
+
+	for {
+		header, err := tarReader.Next()
+		if errors.Is(err, os.ErrClosed) {
+			t.Fatalf("tar reader closed unexpectedly: %v", err)
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read tar entry: %v", err)
+		}
+
+		body, err := io.ReadAll(tarReader)
+		if err != nil {
+			t.Fatalf("read %s body: %v", header.Name, err)
+		}
+		switch header.Name {
+		case "+MANIFEST":
+			manifestBody = body
+		case "+COMPACT_MANIFEST":
+			compactManifestBody = body
+		}
+	}
+
+	if len(manifestBody) == 0 {
+		t.Fatal("missing +MANIFEST in pkg archive")
+	}
+	if len(compactManifestBody) == 0 {
+		t.Fatal("missing +COMPACT_MANIFEST in pkg archive")
+	}
+	return manifestBody, compactManifestBody
 }
 
 func Test_patchPackageSite(t *testing.T) {
