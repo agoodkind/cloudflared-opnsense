@@ -254,9 +254,6 @@ func readPkgManifestFiles(t *testing.T, pkgPath string) ([]byte, []byte) {
 
 	for {
 		header, err := tarReader.Next()
-		if errors.Is(err, os.ErrClosed) {
-			t.Fatalf("tar reader closed unexpectedly: %v", err)
-		}
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -264,15 +261,26 @@ func readPkgManifestFiles(t *testing.T, pkgPath string) ([]byte, []byte) {
 			t.Fatalf("read tar entry: %v", err)
 		}
 
-		body, err := io.ReadAll(tarReader)
-		if err != nil {
-			t.Fatalf("read %s body: %v", header.Name, err)
-		}
 		switch header.Name {
 		case "+MANIFEST":
+			body, err := io.ReadAll(tarReader)
+			if err != nil {
+				t.Fatalf("read %s body: %v", header.Name, err)
+			}
 			manifestBody = body
 		case "+COMPACT_MANIFEST":
+			body, err := io.ReadAll(tarReader)
+			if err != nil {
+				t.Fatalf("read %s body: %v", header.Name, err)
+			}
 			compactManifestBody = body
+		default:
+			if _, err := io.Copy(io.Discard, tarReader); err != nil {
+				t.Fatalf("discard %s body: %v", header.Name, err)
+			}
+		}
+		if len(manifestBody) > 0 && len(compactManifestBody) > 0 {
+			break
 		}
 	}
 
