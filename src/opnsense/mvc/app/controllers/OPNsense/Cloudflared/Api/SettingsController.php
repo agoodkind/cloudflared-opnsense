@@ -15,6 +15,28 @@ class SettingsController extends ApiMutableModelControllerBase
     protected static $internalModelClass = '\OPNsense\Cloudflared\Settings';
     protected static $internalModelName = 'settings';
 
+    public function setAction()
+    {
+        $result = ['result' => 'failed'];
+        if ($this->request->isPost()) {
+            Config::getInstance()->lock();
+            try {
+                $model = $this->getModel();
+                $payload = $this->request->getPost('general');
+                if ($payload !== null) {
+                    $model->general->setNodes($payload);
+                }
+                $result = $this->validate();
+                if (($result['result'] ?? null) === '') {
+                    return $this->save(false, true);
+                }
+            } finally {
+                Config::getInstance()->unlock();
+            }
+        }
+        return $result;
+    }
+
     /**
      * Get a single tunnel ingress rule
      * @param string $uuid item unique id

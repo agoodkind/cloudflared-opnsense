@@ -3,15 +3,20 @@
         <id>general.enabled</id>
         <label>Enable</label>
         <type>checkbox</type>
-        <help>Enable Cloudflare Tunnel service</help>
+        <help>
+            Start the Cloudflare Tunnel service and include it in the generated
+            runtime configuration when you apply changes.
+        </help>
     </field>
     <field>
         <id>general.mode</id>
         <label>Mode</label>
         <type>dropdown</type>
         <help>
-            Token mode: Tunnel configuration managed in Cloudflare dashboard.
-            Config mode: Tunnel ingress rules managed locally below.
+            Token mode uses a Cloudflare-managed tunnel token from Zero Trust
+            and ignores local ingress rules. Config File mode writes a local
+            cloudflared config file and uses the ingress rules from the
+            Ingress Rules tab.
         </help>
     </field>
     <field>
@@ -19,38 +24,55 @@
         <label>Tunnel Token</label>
         <type>password</type>
         <help>
-            Tunnel token from Cloudflare Zero Trust dashboard
-            (required for token mode)
+            Paste the tunnel token from the Cloudflare Zero Trust dashboard.
+            This is only required in Token mode and is written to the local
+            token file on apply.
         </help>
     </field>
     <field>
         <id>general.tunnel_name</id>
         <label>Tunnel Name</label>
         <type>text</type>
-        <help>Friendly name for this tunnel (informational only)</help>
+        <help>
+            Friendly name for the tunnel. In Config File mode this becomes the
+            tunnel name written into the generated cloudflared config.
+        </help>
     </field>
     <field>
         <id>general.post_quantum</id>
         <label>Post-Quantum</label>
         <type>checkbox</type>
-        <help>Enable post-quantum cryptography for tunnel connections</help>
+        <help>
+            Enable Cloudflare's post-quantum option for tunnel connections.
+            Leave this enabled unless you need to troubleshoot compatibility
+            with an older environment.
+        </help>
     </field>
     <field>
         <id>general.edge_ip_version</id>
         <label>Edge IP Version</label>
         <type>dropdown</type>
-        <help>IP version to use for connections to Cloudflare edge</help>
+        <help>
+            Choose whether cloudflared should prefer IPv4, prefer IPv6, or let
+            Cloudflare decide automatically when connecting to the edge.
+        </help>
     </field>
     <field>
         <id>general.protocol</id>
         <label>Protocol</label>
         <type>dropdown</type>
-        <help>Transport protocol for tunnel connections</help>
+        <help>
+            Choose the transport protocol used between cloudflared and the
+            Cloudflare edge. Auto is usually the best default.
+        </help>
     </field>
     <field>
         <id>general.loglevel</id>
         <label>Log Level</label>
         <type>dropdown</type>
-        <help>Logging verbosity level</help>
+        <help>
+            Set the verbosity written to the cloudflared log file. Use Info for
+            normal operation and Debug only when gathering troubleshooting data.
+        </help>
     </field>
 </form>

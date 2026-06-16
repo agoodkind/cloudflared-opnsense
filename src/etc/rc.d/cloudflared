@@ -1,6 +1,6 @@
 #!/bin/sh
 # PROVIDE: cloudflared
-# REQUIRE: NETWORKING
+# REQUIRE: NETWORKING SERVERS LOGIN
 # KEYWORD: shutdown
 #
 # Add the following lines to /etc/rc.conf to enable cloudflared:

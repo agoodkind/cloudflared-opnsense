@@ -59,7 +59,7 @@ func TestWrite_Success(t *testing.T) {
 		t.Fatalf("read back: %v", err)
 	}
 	content := string(b)
-	header := "# Managed by cloudflared-configd -- do not edit manually\n"
+	header := managedHeader + "\n"
 	if !strings.HasPrefix(content, header) {
 		t.Fatalf("missing or wrong header: %q", content)
 	}

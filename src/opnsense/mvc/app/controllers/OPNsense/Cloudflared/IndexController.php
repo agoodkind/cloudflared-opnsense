@@ -29,7 +29,6 @@ class IndexController extends BaseIndexController
         $this->view->title = gettext("Cloudflared Settings");
         $this->view->generalForm = $this->getForm("general");
         $this->view->tunnelForm = $this->getForm("dialogTunnel");
-        $this->view->tunnels = $this->getModel()->tunnels->tunnel->iterateItems();
         $this->view->pick('OPNsense/Cloudflared/settings');
     }
 }
