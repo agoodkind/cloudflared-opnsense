@@ -159,7 +159,8 @@ jobs:
 
       - name: Skip publish
         if: steps.publish_decision.outputs.should_publish != 'true'
-        run: echo "Skipping publish: ${{ steps.publish_decision.outputs.publish_reason }}"
+        run: |
+          echo "Skipping publish: ${{ steps.publish_decision.outputs.publish_reason }}"
 
       - name: Publish to R2 and create the GitHub release
         if: steps.publish_decision.outputs.should_publish == 'true'
