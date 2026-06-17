@@ -37,10 +37,17 @@ GOARCH=		amd64
 
 BUILD_DIR=	dist
 CMD_CONFIGD=	cmd/cloudflared-configd
-CMD_BUILDER=	cmd/cloudflared-builder
 
 CONFIGD_BIN=	${BUILD_DIR}/cloudflared-configd
+
+# The build/release orchestrator lives in its own module under builder/
+# (goodkind.io/cloudflared-builder); build and run it from there.
+BUILDER_DIR=	builder
 BUILDER_BIN=	${BUILD_DIR}/cloudflared-builder
+
+# Reproducible builds: identical source yields an identical binary, so the
+# publish decision can hash installed files as a content signal.
+GO_REPRO_FLAGS=	-trimpath -buildvcs=false
 
 PREFIX=		/usr/local
 SERVICE=	${PREFIX}/opnsense/service/conf/actions.d
@@ -54,19 +61,18 @@ all: build
 
 build:
 	@mkdir -p ${BUILD_DIR}
-	${GO} build -o ${CONFIGD_BIN} ./${CMD_CONFIGD}
-	${GO} build -o ${BUILDER_BIN} ./${CMD_BUILDER}
+	${GO} build ${GO_REPRO_FLAGS} -o ${CONFIGD_BIN} ./${CMD_CONFIGD}
 
 freebsd:
 	@mkdir -p ${BUILD_DIR}
 	GOOS=${GOOS_BSD} GOARCH=${GOARCH} \
-		${GO} build -o ${CONFIGD_BIN} ./${CMD_CONFIGD}
-	GOOS=${GOOS_BSD} GOARCH=${GOARCH} \
-		${GO} build -o ${BUILDER_BIN} ./${CMD_BUILDER}
-	@echo "FreeBSD binaries written to ${BUILD_DIR}/"
+		${GO} build ${GO_REPRO_FLAGS} -o ${CONFIGD_BIN} ./${CMD_CONFIGD}
+	@echo "FreeBSD configd written to ${BUILD_DIR}/"
 
 release: freebsd
-	${BUILDER_BIN} run
+	cd ${.CURDIR}/${BUILDER_DIR} && \
+		${GO} build ${GO_REPRO_FLAGS} -o ${.CURDIR}/${BUILDER_BIN} .
+	${.CURDIR}/${BUILDER_BIN} run
 
 ROUTER?=	3d06:bad:b01::1
 
