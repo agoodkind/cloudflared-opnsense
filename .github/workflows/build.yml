@@ -145,7 +145,9 @@ jobs:
           path: _artifact
 
       - name: Build the publisher
-        run: cd builder && go build -trimpath -buildvcs=false -o "${GITHUB_WORKSPACE}/dist/cloudflared-builder" .
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/dist"
+          cd builder && go build -trimpath -buildvcs=false -o "${GITHUB_WORKSPACE}/dist/cloudflared-builder" .
 
       - name: Decide whether publish is needed
         id: publish_decision
