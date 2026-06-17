@@ -1,6 +1,9 @@
 name: Build FreeBSD packages
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
@@ -161,12 +164,27 @@ jobs:
           name: pkg-build
           path: _artifact
 
+      - name: Decide whether publish is needed
+        id: publish_decision
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          REVISION: ${{ needs.check.outputs.revision }}
+          ARTIFACT_DIR: _artifact
+        run: bash scripts/ci/create-release.sh --check-only
+
+      - name: Skip publish
+        if: steps.publish_decision.outputs.should_publish != 'true'
+        run: |
+          echo "Skipping publish: ${{ steps.publish_decision.outputs.publish_reason }}"
+
       - name: Upload packages and metadata to R2
+        if: steps.publish_decision.outputs.should_publish == 'true'
         env:
           ARTIFACT_DIR: _artifact
         run: bash scripts/ci/upload-r2.sh
 
       - name: Create GitHub release
+        if: steps.publish_decision.outputs.should_publish == 'true'
         env:
           VERSION: ${{ needs.check.outputs.version }}
           REVISION: ${{ needs.check.outputs.revision }}

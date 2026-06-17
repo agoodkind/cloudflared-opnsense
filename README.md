@@ -78,6 +78,7 @@ make fmt
 `.github/workflows/build.yml` runs on:
 
 - Cron every 6 hours (polls upstream for new cloudflared releases)
+- Pushes to `main` (test + build, publish only when package content changed)
 - `workflow_dispatch` (manual trigger)
 - Every PR (test + build, no publish)
 
@@ -85,8 +86,8 @@ Stages:
 
 1. **`check`** (Ubuntu): Queries the GitHub API for the latest cloudflared release. Derives the next FreeBSD revision number from existing release tags. No persistent state.
 2. **`test`** (Ubuntu): `go vet`, `go test -race`, cross-compile for FreeBSD as a build gate, shellcheck on CI scripts.
-3. **`build`** (Ubuntu host with `vmactions/freebsd-vm@v1.4.3` running FreeBSD 14.2): Builds `cloudflared-builder` and `cloudflared-configd` natively in the FreeBSD VM. Runs the builder's `build`, `package`, and `repo` subcommands to produce pkg(8) packages.
-4. **`publish`** (Ubuntu, skipped on PRs): Uploads packages and metadata to R2 via `scripts/ci/upload-r2.sh`. Cuts a tagged GitHub release via `scripts/ci/create-release.sh`.
+3. **`build`** (Ubuntu host with `vmactions/freebsd-vm@v1.4.6` running FreeBSD 14.2): Builds `cloudflared-builder` and `cloudflared-configd` natively in the FreeBSD VM. Runs the builder's `build`, `package`, and `repo` subcommands to produce pkg(8) packages.
+4. **`publish`** (Ubuntu, skipped on PRs): Compares the new artifacts to the latest release for the same upstream version. Uploads packages and metadata to R2 and cuts a tagged GitHub release only when package content changed.
 
 ### Builder binary subcommands (run inside the FreeBSD VM in CI)
 
