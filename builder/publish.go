@@ -120,16 +120,36 @@ func saveState(version string, revision int) {
 // ---- GitHub ----------------------------------------------------------------
 
 func latestGitHubVersion() (string, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get("https://api.github.com/repos/cloudflare/cloudflared/releases/latest")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"https://api.github.com/repos/cloudflare/cloudflared/releases/latest", nil)
 	if err != nil {
-		return "", err
+		slog.Error("build latest-version request failed", "err", err)
+		return "", fmt.Errorf("build request: %w", err)
 	}
-	defer resp.Body.Close()
+	req.Header.Set("Accept", "application/vnd.github+json")
+	// Authenticate when a token is present to avoid unauthenticated rate limits.
+	if token := os.Getenv("GH_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Error("fetch latest version failed", "err", err)
+		return "", fmt.Errorf("request latest release: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		statusErr := fmt.Errorf("github API returned status %d", resp.StatusCode)
+		slog.Error("unexpected github status", "err", statusErr)
+		return "", statusErr
+	}
 
 	var rel ghRelease
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return "", err
+		slog.Error("decode latest release failed", "err", err)
+		return "", fmt.Errorf("decode release: %w", err)
 	}
 	if rel.TagName == "" {
 		return "", errors.New("empty tag_name from GitHub API")
@@ -138,6 +158,11 @@ func latestGitHubVersion() (string, error) {
 }
 
 // ---- archive helpers -------------------------------------------------------
+
+// maxExtractBytes caps a single extracted metadata member so a crafted or
+// corrupt archive cannot drive unbounded disk use. Repository metadata files
+// are well under this.
+const maxExtractBytes = 64 << 20
 
 // extractZstdTar extracts a single named file from a zstd-compressed tar.
 func extractZstdTar(archivePath, targetName, outputPath string) error {
@@ -167,7 +192,7 @@ func extractZstdTar(archivePath, targetName, outputPath string) error {
 			if err != nil {
 				return err
 			}
-			_, err = io.Copy(out, tr)
+			_, err = io.Copy(out, io.LimitReader(tr, maxExtractBytes))
 			out.Close()
 			return err
 		}
