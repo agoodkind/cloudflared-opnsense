@@ -1,2 +1,0 @@
-# deadcode: generated_at=2026-06-17T21:35:15Z
-publish.go:242:6: unreachable func: copyTree	# deadcode:first_added=2026-06-17T21:35:15Z last_seen=2026-06-17T21:35:15Z

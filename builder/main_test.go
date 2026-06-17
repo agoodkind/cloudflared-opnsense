@@ -127,24 +127,34 @@ annotations {
 `
 
 	manifest := parseUCLManifest(ucl)
-	if manifest["name"] != "os-cloudflared" {
-		t.Fatalf("name = %v", manifest["name"])
+
+	var name string
+	if err := json.Unmarshal(manifest["name"], &name); err != nil {
+		t.Fatalf("name unmarshal: %v", err)
 	}
-	if manifest["www"] != "https://goodkind.io" {
-		t.Fatalf("www = %v", manifest["www"])
+	if name != "os-cloudflared" {
+		t.Fatalf("name = %v", name)
 	}
 
-	categories, ok := manifest["categories"].([]string)
-	if !ok {
-		t.Fatalf("categories type = %T", manifest["categories"])
+	var www string
+	if err := json.Unmarshal(manifest["www"], &www); err != nil {
+		t.Fatalf("www unmarshal: %v", err)
+	}
+	if www != "https://goodkind.io" {
+		t.Fatalf("www = %v", www)
+	}
+
+	var categories []string
+	if err := json.Unmarshal(manifest["categories"], &categories); err != nil {
+		t.Fatalf("categories unmarshal: %v", err)
 	}
 	if len(categories) != 1 || categories[0] != "net" {
 		t.Fatalf("categories = %v", categories)
 	}
 
-	annotations, ok := manifest["annotations"].(map[string]string)
-	if !ok {
-		t.Fatalf("annotations type = %T", manifest["annotations"])
+	var annotations map[string]string
+	if err := json.Unmarshal(manifest["annotations"], &annotations); err != nil {
+		t.Fatalf("annotations unmarshal: %v", err)
 	}
 	if annotations["product_email"] != "alex@goodkind.io" {
 		t.Fatalf("product_email = %q", annotations["product_email"])
@@ -538,63 +548,6 @@ func Test_copyFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		err := copyFile(src, dstDir, 0o644)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-}
-
-func Test_copyTree(t *testing.T) {
-	t.Parallel()
-
-	t.Run("copies directory tree preserving structure and contents", func(t *testing.T) {
-		t.Parallel()
-		srcRoot := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(srcRoot, "sub"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(srcRoot, "root.txt"), []byte("r"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(srcRoot, "sub", "nested.txt"), []byte("n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		dstRoot := filepath.Join(t.TempDir(), "dst")
-		if err := copyTree(srcRoot, dstRoot); err != nil {
-			t.Fatal(err)
-		}
-		rdata, err := os.ReadFile(filepath.Join(dstRoot, "root.txt"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(rdata) != "r" {
-			t.Fatalf("root: %q", rdata)
-		}
-		ndata, err := os.ReadFile(filepath.Join(dstRoot, "sub", "nested.txt"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(ndata) != "n" {
-			t.Fatalf("nested: %q", ndata)
-		}
-	})
-
-	t.Run("source not found returns error", func(t *testing.T) {
-		t.Parallel()
-		err := copyTree(filepath.Join(t.TempDir(), "nope"), filepath.Join(t.TempDir(), "dst"))
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-
-	t.Run("destination is an existing file", func(t *testing.T) {
-		t.Parallel()
-		srcRoot := t.TempDir()
-		dstFile := filepath.Join(t.TempDir(), "dst")
-		if err := os.WriteFile(dstFile, []byte("block"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		err := copyTree(srcRoot, dstFile)
 		if err == nil {
 			t.Fatal("expected error")
 		}

@@ -30,7 +30,7 @@ func createGitHubRelease(version string, revision int, repoDir string) error {
 	pluginPkg := filepath.Join(pkgRepoDir, "All", pluginName+"-"+pkgVersion+".pkg")
 	binaryPkg := filepath.Join(pkgRepoDir, "All", "cloudflared-"+version+".pkg")
 
-	logf("creating GitHub release %s", tag)
+	logf("creating GitHub release " + tag)
 
 	// Delete existing release/tag if present.
 	_ = runCmd(repoDir, "gh", "release", "delete", tag, "-y")
@@ -57,10 +57,12 @@ func publishRepositoryMetadata(repoDir string) error {
 
 	pkgDst := filepath.Join(repoDir, "pkg")
 	if err := os.RemoveAll(pkgDst); err != nil {
-		return err
+		slog.Error("remove pkg dst failed", "err", err, "path", pkgDst)
+		return fmt.Errorf("remove %s: %w", pkgDst, err)
 	}
 	if err := os.MkdirAll(pkgDst, 0o755); err != nil {
-		return err
+		slog.Error("create pkg dst failed", "err", err, "path", pkgDst)
+		return fmt.Errorf("mkdir %s: %w", pkgDst, err)
 	}
 
 	for _, f := range []string{"meta.conf", "meta", "packagesite.yaml", "packagesite.pkg", "data.pkg"} {
@@ -75,8 +77,9 @@ func publishRepositoryMetadata(repoDir string) error {
 
 	buildDate := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")
 	headers := fmt.Sprintf("/*\n  Last-Modified: %s\n", buildDate)
-	if err := os.WriteFile(filepath.Join(pkgDst, "_headers"), []byte(headers), 0o644); err != nil {
-		return err
+	if err := os.WriteFile(filepath.Join(pkgDst, "_headers"), []byte(headers), 0o600); err != nil {
+		slog.Error("write headers failed", "err", err)
+		return fmt.Errorf("write _headers: %w", err)
 	}
 
 	_ = runCmd(repoDir, "git", "add", "pkg/")
@@ -107,14 +110,26 @@ func readState() string {
 func readRevision() (int, error) {
 	data, err := os.ReadFile(revisionFile)
 	if err != nil {
-		return 1, err
+		// A missing revision file is the normal "not yet built" case, so this
+		// is a warning rather than an error.
+		slog.Warn("read revision file failed", "err", err, "path", revisionFile)
+		return 1, fmt.Errorf("read revision file: %w", err)
 	}
-	return strconv.Atoi(strings.TrimSpace(string(data)))
+	rev, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		slog.Warn("parse revision failed", "err", err, "path", revisionFile)
+		return 1, fmt.Errorf("parse revision: %w", err)
+	}
+	return rev, nil
 }
 
 func saveState(version string, revision int) {
-	_ = os.WriteFile(stateFile, []byte(version+"\n"), 0o644)
-	_ = os.WriteFile(revisionFile, []byte(strconv.Itoa(revision)+"\n"), 0o644)
+	if err := os.WriteFile(stateFile, []byte(version+"\n"), 0o600); err != nil {
+		slog.Error("write state file failed", "err", err, "path", stateFile)
+	}
+	if err := os.WriteFile(revisionFile, []byte(strconv.Itoa(revision)+"\n"), 0o600); err != nil {
+		slog.Error("write revision file failed", "err", err, "path", revisionFile)
+	}
 }
 
 // ---- GitHub ----------------------------------------------------------------
@@ -168,13 +183,15 @@ const maxExtractBytes = 64 << 20
 func extractZstdTar(archivePath, targetName, outputPath string) error {
 	f, err := os.Open(archivePath)
 	if err != nil {
-		return err
+		slog.Error("open archive failed", "err", err, "path", archivePath)
+		return fmt.Errorf("open %s: %w", archivePath, err)
 	}
 	defer f.Close()
 
 	zr, err := zstd.NewReader(f)
 	if err != nil {
-		return err
+		slog.Error("open zstd reader failed", "err", err, "path", archivePath)
+		return fmt.Errorf("zstd reader %s: %w", archivePath, err)
 	}
 	defer zr.Close()
 
@@ -185,16 +202,22 @@ func extractZstdTar(archivePath, targetName, outputPath string) error {
 			break
 		}
 		if err != nil {
-			return err
+			slog.Error("read tar entry failed", "err", err, "path", archivePath)
+			return fmt.Errorf("tar read %s: %w", archivePath, err)
 		}
 		if hdr.Name == targetName || filepath.Base(hdr.Name) == targetName {
 			out, err := os.Create(outputPath)
 			if err != nil {
-				return err
+				slog.Error("create output failed", "err", err, "path", outputPath)
+				return fmt.Errorf("create %s: %w", outputPath, err)
 			}
-			_, err = io.Copy(out, io.LimitReader(tr, maxExtractBytes))
+			_, copyErr := io.Copy(out, io.LimitReader(tr, maxExtractBytes))
 			out.Close()
-			return err
+			if copyErr != nil {
+				slog.Error("copy archive member failed", "err", copyErr, "path", outputPath)
+				return fmt.Errorf("copy %s: %w", outputPath, copyErr)
+			}
+			return nil
 		}
 	}
 	return fmt.Errorf("file %q not found in archive %s", targetName, archivePath)
@@ -204,13 +227,15 @@ func extractZstdTar(archivePath, targetName, outputPath string) error {
 func createZstdTar(archivePath, filePath, nameInArchive string) error {
 	out, err := os.Create(archivePath)
 	if err != nil {
-		return err
+		slog.Error("create archive failed", "err", err, "path", archivePath)
+		return fmt.Errorf("create %s: %w", archivePath, err)
 	}
 	defer out.Close()
 
 	zw, err := zstd.NewWriter(out)
 	if err != nil {
-		return err
+		slog.Error("open zstd writer failed", "err", err, "path", archivePath)
+		return fmt.Errorf("zstd writer %s: %w", archivePath, err)
 	}
 	defer zw.Close()
 
@@ -219,13 +244,15 @@ func createZstdTar(archivePath, filePath, nameInArchive string) error {
 
 	in, err := os.Open(filePath)
 	if err != nil {
-		return err
+		slog.Error("open source failed", "err", err, "path", filePath)
+		return fmt.Errorf("open %s: %w", filePath, err)
 	}
 	defer in.Close()
 
 	info, err := in.Stat()
 	if err != nil {
-		return err
+		slog.Error("stat source failed", "err", err, "path", filePath)
+		return fmt.Errorf("stat %s: %w", filePath, err)
 	}
 
 	hdr := &tar.Header{
@@ -235,10 +262,14 @@ func createZstdTar(archivePath, filePath, nameInArchive string) error {
 		ModTime: info.ModTime(),
 	}
 	if err := tw.WriteHeader(hdr); err != nil {
-		return err
+		slog.Error("write tar header failed", "err", err, "name", nameInArchive)
+		return fmt.Errorf("write tar header: %w", err)
 	}
-	_, err = io.Copy(tw, in)
-	return err
+	if _, err := io.Copy(tw, in); err != nil {
+		slog.Error("copy into archive failed", "err", err, "path", filePath)
+		return fmt.Errorf("copy %s: %w", filePath, err)
+	}
+	return nil
 }
 
 // ---- fs helpers ------------------------------------------------------------
@@ -246,44 +277,33 @@ func createZstdTar(archivePath, filePath, nameInArchive string) error {
 func copyFile(src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
-		return err
+		slog.Error("open source failed", "err", err, "path", src)
+		return fmt.Errorf("open %s: %w", src, err)
 	}
 	defer in.Close()
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
+		slog.Error("create destination dir failed", "err", err, "path", dst)
+		return fmt.Errorf("mkdir for %s: %w", dst, err)
 	}
 
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
-		return err
+		slog.Error("open destination failed", "err", err, "path", dst)
+		return fmt.Errorf("open %s: %w", dst, err)
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, in)
-	return err
-}
-
-func copyTree(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode())
-		}
-		return copyFile(path, target, info.Mode())
-	})
+	if _, err := io.Copy(out, in); err != nil {
+		slog.Error("copy file contents failed", "err", err, "src", src, "dst", dst)
+		return fmt.Errorf("copy %s to %s: %w", src, dst, err)
+	}
+	return nil
 }
 
 func filterLines(s string, keep func(string) bool) string {
 	var out strings.Builder
-	for _, l := range strings.Split(s, "\n") {
+	for l := range strings.SplitSeq(s, "\n") {
 		if keep(l) {
 			out.WriteString(l)
 			out.WriteByte('\n')
@@ -294,21 +314,67 @@ func filterLines(s string, keep func(string) bool) string {
 
 // ---- exec helper -----------------------------------------------------------
 
+// execArgPattern confines the command name and every argument to an alphabet
+// that cannot break out of a single argv slot or smuggle a shell metacharacter.
+// All callers funnel through runCmd/runCmdWithEnv, so validating here means no
+// externally-derived value (env vars, directory-entry names, http responses,
+// flags) reaches os/exec without first passing this gate.
+var execArgPattern = regexp.MustCompile(`^[A-Za-z0-9 ._:/@=+,-]*$`)
+
+// sanitizeExecArgv validates the command name and each argument against the
+// injection-safe alphabet and returns a freshly built name and argv composed
+// only of values that passed the check, so no externally-derived value reaches
+// os/exec without first flowing through this gate.
+func sanitizeExecArgv(name string, args []string) (string, []string, error) {
+	if !execArgPattern.MatchString(name) {
+		err := fmt.Errorf("refusing to exec command with unsafe name %q", name)
+		slog.Error("unsafe exec command name", "err", err)
+		return "", nil, err
+	}
+	safeName := string(execArgPattern.Find([]byte(name)))
+	safeArgs := make([]string, 0, len(args))
+	for _, arg := range args {
+		if !execArgPattern.MatchString(arg) {
+			err := fmt.Errorf("refusing to exec %q with unsafe argument %q", name, arg)
+			slog.Error("unsafe exec argument", "err", err, "command", name)
+			return "", nil, err
+		}
+		safeArgs = append(safeArgs, string(execArgPattern.Find([]byte(arg))))
+	}
+	return safeName, safeArgs, nil
+}
+
 func runCmd(dir string, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	safeName, safeArgs, err := sanitizeExecArgv(name, args)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(context.Background(), safeName, safeArgs...)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		slog.Error("command failed", "err", err, "command", safeName)
+		return fmt.Errorf("run %s: %w", safeName, err)
+	}
+	return nil
 }
 
 func runCmdWithEnv(dir string, env map[string]string, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	safeName, safeArgs, err := sanitizeExecArgv(name, args)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(context.Background(), safeName, safeArgs...)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(), envToPairs(env)...)
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		slog.Error("command failed", "err", err, "command", safeName)
+		return fmt.Errorf("run %s: %w", safeName, err)
+	}
+	return nil
 }
 
 func envToPairs(values map[string]string) []string {
@@ -319,9 +385,12 @@ func envToPairs(values map[string]string) []string {
 	return pairs
 }
 
-func logf(format string, args ...any) {
+// logf prints a timestamped, preformatted line to stdout. Callers that need
+// interpolation preformat with [fmt.Sprintf]; this is user-facing CLI output,
+// which package main may emit through fmt.
+func logf(msg string) {
 	ts := time.Now().Format("2006-01-02 15:04:05 MST")
-	fmt.Printf("[%s] %s\n", ts, fmt.Sprintf(format, args...))
+	fmt.Printf("[%s] %s\n", ts, msg)
 }
 
 func emptyOr(s, dflt string) string {
@@ -394,7 +463,7 @@ func cmdPlan(cfg *config) error {
 
 	writeGitHubOutput("version", v)
 	writeGitHubOutput("revision", strconv.Itoa(rev))
-	logf("upstream=%s highest_published=r%d building=r%d", v, highest, rev)
+	logf(fmt.Sprintf("upstream=%s highest_published=r%d building=r%d", v, highest, rev))
 	return nil
 }
 
@@ -604,7 +673,7 @@ func decidePublish(version string, revision int, repoDir string) (publishDecisio
 
 	decision.latestTag = version + "-freebsd-r" + strconv.Itoa(highest)
 	prevPkgVersion := version + "_" + strconv.Itoa(highest)
-	logf("comparing against latest release %s", decision.latestTag)
+	logf("comparing against latest release " + decision.latestTag)
 
 	newBinaryFP, err := normalizedManifestFingerprint(newBinaryPkg, binaryPkg)
 	if err != nil {
@@ -707,16 +776,16 @@ func writeGitHubOutput(key, value string) {
 	// write outside the runner-provided location.
 	path = filepath.Clean(path)
 	if !filepath.IsAbs(path) {
-		logf("WARNING: ignoring non-absolute GITHUB_OUTPUT path: %q", path)
+		logf(fmt.Sprintf("WARNING: ignoring non-absolute GITHUB_OUTPUT path: %q", path))
 		return
 	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
-		logf("WARNING: could not write GITHUB_OUTPUT: %v", err)
+		logf(fmt.Sprintf("WARNING: could not write GITHUB_OUTPUT: %v", err))
 		return
 	}
 	defer func() { _ = f.Close() }()
 	if _, err := f.WriteString(key + "=" + value + "\n"); err != nil {
-		logf("WARNING: could not write GITHUB_OUTPUT: %v", err)
+		logf(fmt.Sprintf("WARNING: could not write GITHUB_OUTPUT: %v", err))
 	}
 }

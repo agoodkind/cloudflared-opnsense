@@ -20,9 +20,10 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -122,10 +123,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	if errors.Is(err, errUpToDate) {
+		// `check` signals "no build needed" through the process exit code so the
+		// workflow can gate later steps; this is not a failure.
+		os.Exit(1)
+	}
 	if err != nil {
-		log.Fatalf("cloudflared-builder %s: %v", args[0], err)
+		slog.Error("command failed", "err", err, "command", args[0])
+		fmt.Fprintf(os.Stderr, "cloudflared-builder %s: %v\n", args[0], err)
+		os.Exit(1)
 	}
 }
+
+// errUpToDate is returned by cmdCheck when the latest upstream version is
+// already built. main translates it into a non-failure exit code so the
+// [os.Exit] stays in main rather than in a command function.
+var errUpToDate = errors.New("already up-to-date")
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr,
@@ -140,7 +153,7 @@ func autoRepoDir() string {
 	}
 	// Walk up from the binary to find the repo root (contains go.mod).
 	dir := filepath.Dir(exe)
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			return dir
 		}
@@ -164,6 +177,7 @@ func (c *config) resolve() (version string, revision int, err error) {
 	if v == "" {
 		v, err = latestGitHubVersion()
 		if err != nil {
+			slog.Error("resolve upstream version failed", "err", err)
 			return "", 0, fmt.Errorf("fetch latest version: %w", err)
 		}
 	}
@@ -199,10 +213,10 @@ func cmdCheck(cfg *config) error {
 		return err
 	}
 	last := readState()
-	logf("latest=%s last_built=%s", latest, emptyOr(last, "none"))
+	logf(fmt.Sprintf("latest=%s last_built=%s", latest, emptyOr(last, "none")))
 	if latest == last && !cfg.force {
 		logf("already up-to-date")
-		os.Exit(1)
+		return errUpToDate
 	}
 	logf("build needed")
 	return nil
@@ -255,13 +269,13 @@ func cmdPublish(cfg *config) error {
 	writeGitHubOutput("publish_reason", decision.reason)
 	writeGitHubOutput("target_tag", v+"-freebsd-r"+strconv.Itoa(rev))
 	writeGitHubOutput("latest_tag", decision.latestTag)
-	logf("publish decision: %v (%s)", decision.shouldPublish, decision.reason)
+	logf(fmt.Sprintf("publish decision: %v (%s)", decision.shouldPublish, decision.reason))
 
 	if cfg.checkOnly {
 		return nil
 	}
 	if !decision.shouldPublish {
-		logf("skipping publish: %s", decision.reason)
+		logf("skipping publish: " + decision.reason)
 		return nil
 	}
 
@@ -290,7 +304,7 @@ func cmdRun(cfg *config) error {
 
 	last := readState()
 	if v == last && !cfg.force {
-		logf("already at latest version %s, nothing to do (use -force to rebuild)", v)
+		logf(fmt.Sprintf("already at latest version %s, nothing to do (use -force to rebuild)", v))
 		return nil
 	}
 
@@ -310,10 +324,11 @@ func cmdRun(cfg *config) error {
 	}
 
 	if err := os.MkdirAll(filepath.Join(pkgRepoDir, "All"), 0o755); err != nil {
-		return err
+		slog.Error("create repo output dir failed", "err", err)
+		return fmt.Errorf("mkdir repo output: %w", err)
 	}
 
-	logf("building cloudflared %s revision %d", v, rev)
+	logf(fmt.Sprintf("building cloudflared %s revision %d", v, rev))
 
 	if err := buildCloudflared(v); err != nil {
 		return err
@@ -325,7 +340,7 @@ func cmdRun(cfg *config) error {
 		return err
 	}
 	if err := createGitHubRelease(v, rev, cfg.repoDir); err != nil {
-		logf("WARNING: GitHub release failed: %v (continuing)", err)
+		logf(fmt.Sprintf("WARNING: GitHub release failed: %v (continuing)", err))
 	}
 	if err := updatePkgRepository(v, rev); err != nil {
 		return err
@@ -334,6 +349,6 @@ func cmdRun(cfg *config) error {
 		return err
 	}
 	saveState(v, rev)
-	logf("build and release complete (%s_%d)", v, rev)
+	logf(fmt.Sprintf("build and release complete (%s_%d)", v, rev))
 	return nil
 }
