@@ -1,2 +1,2 @@
-# deadcode: generated_at=2026-06-17T16:29:42Z
-main.go:1209:6: unreachable func: copyTree	# deadcode:first_added=2026-06-17T16:28:32Z last_seen=2026-06-17T16:29:42Z
+# deadcode: generated_at=2026-06-17T16:48:17Z
+main.go:1262:6: unreachable func: copyTree	# deadcode:first_added=2026-06-17T16:28:32Z last_seen=2026-06-17T16:48:17Z
