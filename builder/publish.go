@@ -314,65 +314,36 @@ func filterLines(s string, keep func(string) bool) string {
 
 // ---- exec helper -----------------------------------------------------------
 
-// execArgPattern confines the command name and every argument to an alphabet
-// that cannot break out of a single argv slot or smuggle a shell metacharacter.
-// All callers funnel through runCmd/runCmdWithEnv, so validating here means no
-// externally-derived value (env vars, directory-entry names, http responses,
-// flags) reaches os/exec without first passing this gate.
-var execArgPattern = regexp.MustCompile(`^[A-Za-z0-9 ._:/@=+,-]*$`)
-
-// sanitizeExecArgv validates the command name and each argument against the
-// injection-safe alphabet and returns a freshly built name and argv composed
-// only of values that passed the check, so no externally-derived value reaches
-// os/exec without first flowing through this gate.
-func sanitizeExecArgv(name string, args []string) (string, []string, error) {
-	if !execArgPattern.MatchString(name) {
-		err := fmt.Errorf("refusing to exec command with unsafe name %q", name)
-		slog.Error("unsafe exec command name", "err", err)
-		return "", nil, err
-	}
-	safeName := string(execArgPattern.Find([]byte(name)))
-	safeArgs := make([]string, 0, len(args))
-	for _, arg := range args {
-		if !execArgPattern.MatchString(arg) {
-			err := fmt.Errorf("refusing to exec %q with unsafe argument %q", name, arg)
-			slog.Error("unsafe exec argument", "err", err, "command", name)
-			return "", nil, err
-		}
-		safeArgs = append(safeArgs, string(execArgPattern.Find([]byte(arg))))
-	}
-	return safeName, safeArgs, nil
-}
+// runCmd and runCmdWithEnv invoke trusted build tools (gh, git, aws, gmake,
+// make, pkg) by name with separate argv, never through a shell, so argument
+// content cannot inject a command. gosec's G702 taint pass still flags these
+// because the argv carries flag- and environment-derived values (version
+// strings, the R2 account id, file paths). Those legitimately include spaces,
+// newlines, and parentheses (for example the release title and notes), so an
+// alphabet-restricting gate would corrupt them; the G702 findings are baselined
+// as false positives instead.
 
 func runCmd(dir string, name string, args ...string) error {
-	safeName, safeArgs, err := sanitizeExecArgv(name, args)
-	if err != nil {
-		return err
-	}
-	cmd := exec.CommandContext(context.Background(), safeName, safeArgs...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		slog.Error("command failed", "err", err, "command", safeName)
-		return fmt.Errorf("run %s: %w", safeName, err)
+		slog.Error("command failed", "err", err, "command", name)
+		return fmt.Errorf("run %s: %w", name, err)
 	}
 	return nil
 }
 
 func runCmdWithEnv(dir string, env map[string]string, name string, args ...string) error {
-	safeName, safeArgs, err := sanitizeExecArgv(name, args)
-	if err != nil {
-		return err
-	}
-	cmd := exec.CommandContext(context.Background(), safeName, safeArgs...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(), envToPairs(env)...)
 	if err := cmd.Run(); err != nil {
-		slog.Error("command failed", "err", err, "command", safeName)
-		return fmt.Errorf("run %s: %w", safeName, err)
+		slog.Error("command failed", "err", err, "command", name)
+		return fmt.Errorf("run %s: %w", name, err)
 	}
 	return nil
 }
