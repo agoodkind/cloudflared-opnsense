@@ -9,6 +9,9 @@
 set -euo pipefail
 
 REPO="agoodkind/cloudflared-opnsense"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANIFEST_FILTER="${SCRIPT_DIR}/package-content-manifest.jq"
+REVISION_FILTER="${SCRIPT_DIR}/highest-release-revision.jq"
 MODE="publish"
 
 if [[ "${1:-}" == "--check-only" ]]; then
@@ -39,54 +42,18 @@ write_output() {
     fi
 }
 
-package_sha256() {
-    local file_path="$1"
-
-    sha256sum "${file_path}" | awk '{print $1}'
-}
-
 package_manifest_sha256() {
     local file_path="$1"
 
     tar --zstd --extract --to-stdout --file "${file_path}" "+MANIFEST" \
-        | jq -S '
-            del(
-                .version,
-                .flatsize,
-                .annotations.product_version,
-                .annotations.product_hash,
-                .files["/usr/local/opnsense/version/cloudflared"]
-            )
-        ' \
+        | jq -S -f "${MANIFEST_FILTER}" \
         | sha256sum \
         | awk '{print $1}'
 }
 
 highest_existing_revision() {
-    local releases_json
-
-    releases_json="$(gh release list --repo "${REPO}" --limit 100 --json tagName)"
-    RELEASES_JSON="${releases_json}" VERSION_PREFIX="${VERSION}-freebsd-r" python3 - <<'PY'
-import json
-import os
-
-releases = json.loads(os.environ["RELEASES_JSON"])
-prefix = os.environ["VERSION_PREFIX"]
-revisions = []
-
-for release in releases:
-    tag_name = release.get("tagName", "")
-    if not tag_name.startswith(prefix):
-        continue
-    suffix = tag_name[len(prefix):]
-    try:
-        revisions.append(int(suffix))
-    except ValueError:
-        continue
-
-if revisions:
-    print(max(revisions))
-PY
+    gh release list --repo "${REPO}" --limit 100 --json tagName \
+        | jq -r --arg prefix "${VERSION}-freebsd-r" -f "${REVISION_FILTER}"
 }
 
 download_release_asset() {
@@ -107,15 +74,6 @@ download_release_asset() {
     fi
 }
 
-release_sha256() {
-    local release_tag="$1"
-    local filename="$2"
-    local output_dir="${TMP_DIR}"
-
-    download_release_asset "${release_tag}" "${filename}" "${output_dir}" || return 1
-    package_sha256 "${output_dir}/${filename}"
-}
-
 release_manifest_sha256() {
     local release_tag="$1"
     local filename="$2"
@@ -128,10 +86,10 @@ release_manifest_sha256() {
 decide_publish() {
     local highest_existing
     local latest_os
-    local pkg_cf_sha
-    local pkg_os_sha
-    local prev_cf_sha
-    local prev_os_sha
+    local pkg_cf_manifest_sha
+    local pkg_os_manifest_sha
+    local prev_cf_manifest_sha
+    local prev_os_manifest_sha
 
     echo "Target release tag: ${TAG}"
 
@@ -144,8 +102,8 @@ decide_publish() {
         return 1
     fi
 
-    pkg_cf_sha="$(package_sha256 "${PKG_CF}")"
-    pkg_os_sha="$(package_manifest_sha256 "${PKG_OS}")"
+    pkg_cf_manifest_sha="$(package_manifest_sha256 "${PKG_CF}")"
+    pkg_os_manifest_sha="$(package_manifest_sha256 "${PKG_OS}")"
 
     highest_existing="$(highest_existing_revision)"
     highest_existing="${highest_existing:-0}"
@@ -165,17 +123,17 @@ decide_publish() {
     latest_os="${VERSION}_${highest_existing}"
     echo "Latest release for ${VERSION} is ${LATEST_TAG}"
 
-    if ! prev_cf_sha="$(release_sha256 "${LATEST_TAG}" "cloudflared-${VERSION}.pkg")"; then
+    if ! prev_cf_manifest_sha="$(release_manifest_sha256 "${LATEST_TAG}" "cloudflared-${VERSION}.pkg")"; then
         echo "ERROR: could not download or hash cloudflared-${VERSION}.pkg from ${LATEST_TAG}." >&2
         return 1
     fi
 
-    if ! prev_os_sha="$(release_manifest_sha256 "${LATEST_TAG}" "os-cloudflared-${latest_os}.pkg")"; then
+    if ! prev_os_manifest_sha="$(release_manifest_sha256 "${LATEST_TAG}" "os-cloudflared-${latest_os}.pkg")"; then
         echo "ERROR: could not download or hash os-cloudflared-${latest_os}.pkg from ${LATEST_TAG}." >&2
         return 1
     fi
 
-    if [[ "${pkg_cf_sha}" == "${prev_cf_sha}" && "${pkg_os_sha}" == "${prev_os_sha}" ]]; then
+    if [[ "${pkg_cf_manifest_sha}" == "${prev_cf_manifest_sha}" && "${pkg_os_manifest_sha}" == "${prev_os_manifest_sha}" ]]; then
         SHOULD_PUBLISH="false"
         PUBLISH_REASON="no_meaningful_package_change"
         return 0
