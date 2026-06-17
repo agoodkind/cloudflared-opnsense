@@ -163,15 +163,15 @@ func TestCreatePkgArchiveUsesLegacyManifestLayout(t *testing.T) {
 	tempDir := t.TempDir()
 	stagingDir := filepath.Join(tempDir, "staging")
 	binDir := filepath.Join(stagingDir, "usr", "local", "bin")
-	if err := os.MkdirAll(binDir, 0755); err != nil {
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(binDir, "cloudflared"), []byte("binary"), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(binDir, "cloudflared"), []byte("binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	plistPath := filepath.Join(tempDir, "plist")
-	if err := os.WriteFile(plistPath, []byte("/usr/local/bin/cloudflared\n@dir /usr/local/etc/cloudflared\n"), 0644); err != nil {
+	if err := os.WriteFile(plistPath, []byte("/usr/local/bin/cloudflared\n@dir /usr/local/etc/cloudflared\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -319,7 +319,7 @@ func Test_patchPackageSite(t *testing.T) {
 		t.Parallel()
 		path := filepath.Join(t.TempDir(), "in.ndjson")
 		raw := "not json at all\n"
-		if err := os.WriteFile(path, []byte(raw), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
@@ -340,7 +340,7 @@ func Test_patchPackageSite(t *testing.T) {
 			"path":     "old-plugin",
 			"repopath": "old-plugin",
 		})
-		if err := os.WriteFile(path, []byte(line+"\n"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(line+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
@@ -366,7 +366,7 @@ func Test_patchPackageSite(t *testing.T) {
 			"path":     "old-bin",
 			"repopath": "old-bin",
 		})
-		if err := os.WriteFile(path, []byte(line+"\n"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(line+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
@@ -392,7 +392,7 @@ func Test_patchPackageSite(t *testing.T) {
 			"path":     "keep-me",
 			"repopath": "keep-me-too",
 		})
-		if err := os.WriteFile(path, []byte(line+"\n"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(line+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
@@ -413,7 +413,7 @@ func Test_patchPackageSite(t *testing.T) {
 		t.Parallel()
 		path := filepath.Join(t.TempDir(), "in.ndjson")
 		content := ndjsonLine(map[string]any{"name": "x", "version": "1"}) + "\n\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
@@ -432,7 +432,7 @@ func Test_patchPackageSite(t *testing.T) {
 		l1 := ndjsonLine(map[string]any{"name": "a", "version": "1"})
 		l2 := ndjsonLine(map[string]any{"name": "b", "version": "2"})
 		raw := l1 + "\n\n" + l2 + "\n"
-		if err := os.WriteFile(path, []byte(raw), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
@@ -453,11 +453,11 @@ func Test_copyFile(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		src := filepath.Join(tmp, "src.txt")
-		if err := os.WriteFile(src, []byte("hello"), 0644); err != nil {
+		if err := os.WriteFile(src, []byte("hello"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		dst := filepath.Join(tmp, "dst.txt")
-		if err := copyFile(src, dst, 0644); err != nil {
+		if err := copyFile(src, dst, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		data, err := os.ReadFile(dst)
@@ -471,7 +471,7 @@ func Test_copyFile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if fi.Mode().Perm()&0777 != 0644 {
+		if fi.Mode().Perm()&0o777 != 0o644 {
 			t.Fatalf("mode: %v", fi.Mode())
 		}
 	})
@@ -480,11 +480,11 @@ func Test_copyFile(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		src := filepath.Join(tmp, "a.txt")
-		if err := os.WriteFile(src, []byte("x"), 0644); err != nil {
+		if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		dst := filepath.Join(tmp, "nested", "deep", "b.txt")
-		if err := copyFile(src, dst, 0644); err != nil {
+		if err := copyFile(src, dst, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		data, err := os.ReadFile(dst)
@@ -499,7 +499,7 @@ func Test_copyFile(t *testing.T) {
 	t.Run("source not found returns error", func(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
-		err := copyFile(filepath.Join(tmp, "missing"), filepath.Join(tmp, "out"), 0644)
+		err := copyFile(filepath.Join(tmp, "missing"), filepath.Join(tmp, "out"), 0o644)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -512,15 +512,15 @@ func Test_copyFile(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		block := filepath.Join(tmp, "block")
-		if err := os.WriteFile(block, []byte("x"), 0644); err != nil {
+		if err := os.WriteFile(block, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		src := filepath.Join(tmp, "src.txt")
-		if err := os.WriteFile(src, []byte("y"), 0644); err != nil {
+		if err := os.WriteFile(src, []byte("y"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		dst := filepath.Join(block, "nested", "out.txt")
-		err := copyFile(src, dst, 0644)
+		err := copyFile(src, dst, 0o644)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -530,14 +530,14 @@ func Test_copyFile(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		src := filepath.Join(tmp, "src.txt")
-		if err := os.WriteFile(src, []byte("z"), 0644); err != nil {
+		if err := os.WriteFile(src, []byte("z"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		dstDir := filepath.Join(tmp, "dstdir")
-		if err := os.MkdirAll(dstDir, 0755); err != nil {
+		if err := os.MkdirAll(dstDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		err := copyFile(src, dstDir, 0644)
+		err := copyFile(src, dstDir, 0o644)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -550,13 +550,13 @@ func Test_copyTree(t *testing.T) {
 	t.Run("copies directory tree preserving structure and contents", func(t *testing.T) {
 		t.Parallel()
 		srcRoot := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(srcRoot, "sub"), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(srcRoot, "sub"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(srcRoot, "root.txt"), []byte("r"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(srcRoot, "root.txt"), []byte("r"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(srcRoot, "sub", "nested.txt"), []byte("n"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(srcRoot, "sub", "nested.txt"), []byte("n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		dstRoot := filepath.Join(t.TempDir(), "dst")
@@ -591,7 +591,7 @@ func Test_copyTree(t *testing.T) {
 		t.Parallel()
 		srcRoot := t.TempDir()
 		dstFile := filepath.Join(t.TempDir(), "dst")
-		if err := os.WriteFile(dstFile, []byte("block"), 0644); err != nil {
+		if err := os.WriteFile(dstFile, []byte("block"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		err := copyTree(srcRoot, dstFile)
@@ -609,7 +609,7 @@ func Test_createZstdTar_extractZstdTar(t *testing.T) {
 		tmp := t.TempDir()
 		orig := filepath.Join(tmp, "original.txt")
 		want := []byte("payload data\n")
-		if err := os.WriteFile(orig, want, 0644); err != nil {
+		if err := os.WriteFile(orig, want, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		archive := filepath.Join(tmp, "out.tar.zst")
@@ -633,7 +633,7 @@ func Test_createZstdTar_extractZstdTar(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		orig := filepath.Join(tmp, "original.txt")
-		if err := os.WriteFile(orig, []byte("full"), 0644); err != nil {
+		if err := os.WriteFile(orig, []byte("full"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		archive := filepath.Join(tmp, "full.tar.zst")
@@ -658,7 +658,7 @@ func Test_createZstdTar_extractZstdTar(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		bad := filepath.Join(tmp, "bad.zst")
-		if err := os.WriteFile(bad, []byte{0x00, 0x01, 0x02}, 0644); err != nil {
+		if err := os.WriteFile(bad, []byte{0x00, 0x01, 0x02}, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		err := extractZstdTar(bad, "x", filepath.Join(tmp, "out.txt"))
@@ -682,7 +682,7 @@ func Test_createZstdTar_extractZstdTar(t *testing.T) {
 			t.Fatal(err)
 		}
 		arc := filepath.Join(tmp, "bad.tar.zst")
-		if err := os.WriteFile(arc, buf.Bytes(), 0644); err != nil {
+		if err := os.WriteFile(arc, buf.Bytes(), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		err = extractZstdTar(arc, "any.txt", filepath.Join(tmp, "out.txt"))
@@ -695,7 +695,7 @@ func Test_createZstdTar_extractZstdTar(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		orig := filepath.Join(tmp, "f.txt")
-		if err := os.WriteFile(orig, []byte("q"), 0644); err != nil {
+		if err := os.WriteFile(orig, []byte("q"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		archive := filepath.Join(tmp, "a.tar.zst")
@@ -703,7 +703,7 @@ func Test_createZstdTar_extractZstdTar(t *testing.T) {
 			t.Fatal(err)
 		}
 		outDir := filepath.Join(tmp, "outdir")
-		if err := os.MkdirAll(outDir, 0755); err != nil {
+		if err := os.MkdirAll(outDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		err := extractZstdTar(archive, "only.txt", outDir)
@@ -716,7 +716,7 @@ func Test_createZstdTar_extractZstdTar(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		orig := filepath.Join(tmp, "f.txt")
-		if err := os.WriteFile(orig, []byte("z"), 0644); err != nil {
+		if err := os.WriteFile(orig, []byte("z"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		archive := filepath.Join(tmp, "a.tar.zst")
@@ -767,11 +767,11 @@ func Test_createZstdTar_extractZstdTar(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		orig := filepath.Join(tmp, "src.txt")
-		if err := os.WriteFile(orig, []byte("data"), 0644); err != nil {
+		if err := os.WriteFile(orig, []byte("data"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		archiveDir := filepath.Join(tmp, "archive.zst")
-		if err := os.MkdirAll(archiveDir, 0755); err != nil {
+		if err := os.MkdirAll(archiveDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		err := createZstdTar(archiveDir, orig, "name")
@@ -807,7 +807,7 @@ func Test_readState(t *testing.T) {
 	t.Run("returns trimmed content when file present", func(t *testing.T) {
 		dir := t.TempDir()
 		withStateFiles(t, dir)
-		if err := os.WriteFile(stateFile, []byte("2026.3.0\n"), 0644); err != nil {
+		if err := os.WriteFile(stateFile, []byte("2026.3.0\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		got := readState()
@@ -832,7 +832,7 @@ func Test_readRevision(t *testing.T) {
 	t.Run("returns parsed integer when file present", func(t *testing.T) {
 		dir := t.TempDir()
 		withStateFiles(t, dir)
-		if err := os.WriteFile(revisionFile, []byte("5\n"), 0644); err != nil {
+		if err := os.WriteFile(revisionFile, []byte("5\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		got, err := readRevision()
@@ -847,7 +847,7 @@ func Test_readRevision(t *testing.T) {
 	t.Run("returns error when file contains non-integer", func(t *testing.T) {
 		dir := t.TempDir()
 		withStateFiles(t, dir)
-		if err := os.WriteFile(revisionFile, []byte("notanumber\n"), 0644); err != nil {
+		if err := os.WriteFile(revisionFile, []byte("notanumber\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		_, err := readRevision()

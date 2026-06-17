@@ -272,7 +272,7 @@ func cmdRun(cfg *config) error {
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Join(pkgRepoDir, "All"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(pkgRepoDir, "All"), 0o755); err != nil {
 		return err
 	}
 
@@ -306,7 +306,7 @@ func cmdRun(cfg *config) error {
 func buildCloudflared(version string) error {
 	logf("cloning cloudflared %s", version)
 
-	if err := os.MkdirAll(workDir, 0755); err != nil {
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		return err
 	}
 	srcDir := filepath.Join(workDir, "cloudflared")
@@ -383,7 +383,7 @@ func patchFreeBSD(srcDir string) error {
 	bsdCollector := filepath.Join(srcDir, "diagnostic", "system_collector_freebsd.go")
 	if data, err := os.ReadFile(linuxCollector); err == nil {
 		patched := strings.ReplaceAll(string(data), "linux", "freebsd")
-		if err := os.WriteFile(bsdCollector, []byte(patched), 0644); err != nil {
+		if err := os.WriteFile(bsdCollector, []byte(patched), 0o644); err != nil {
 			return err
 		}
 	}
@@ -396,7 +396,7 @@ func sedInPlace(path, old, newVal string) error {
 		return err
 	}
 	replaced := strings.ReplaceAll(string(data), old, newVal)
-	return os.WriteFile(path, []byte(replaced), 0644)
+	return os.WriteFile(path, []byte(replaced), 0o644)
 }
 
 // ---- packaging -------------------------------------------------------------
@@ -410,13 +410,13 @@ func createBinaryPackage(cfVersion, repoDir string) error {
 	}
 
 	binDst := filepath.Join(staging, "usr", "local", "bin")
-	if err := os.MkdirAll(binDst, 0755); err != nil {
+	if err := os.MkdirAll(binDst, 0o755); err != nil {
 		return err
 	}
 	if err := copyFile(
 		filepath.Join(workDir, "cloudflared", "cloudflared"),
 		filepath.Join(binDst, "cloudflared"),
-		0755,
+		0o755,
 	); err != nil {
 		return err
 	}
@@ -442,7 +442,7 @@ func createBinaryPackage(cfVersion, repoDir string) error {
 	}
 
 	outDir := filepath.Join(pkgRepoDir, "All")
-	if err := os.MkdirAll(outDir, 0755); err != nil {
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
 
@@ -474,7 +474,7 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	if err := os.RemoveAll(staging); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(staging, 0755); err != nil {
+	if err := os.MkdirAll(staging, 0o755); err != nil {
 		return err
 	}
 
@@ -491,7 +491,7 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 
 	configdBin := filepath.Join(repoDir, "dist", "cloudflared-configd")
 	binDst := filepath.Join(staging, "usr", "local", "bin", "cloudflared-configd")
-	if err := copyFile(configdBin, binDst, 0755); err != nil {
+	if err := copyFile(configdBin, binDst, 0o755); err != nil {
 		return fmt.Errorf("copy cloudflared-configd: %w", err)
 	}
 
@@ -532,7 +532,7 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	}
 
 	outDir := filepath.Join(pkgRepoDir, "All")
-	if err := os.MkdirAll(outDir, 0755); err != nil {
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
 
@@ -561,7 +561,7 @@ func runMake(repoDir, target string, vars []string) error {
 }
 
 func appendPlistLines(path string, lines []string) error {
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
@@ -822,7 +822,7 @@ func createPkgArchive(
 		hdr := &tar.Header{
 			Name: name,
 			Size: int64(len(data)),
-			Mode: 0644,
+			Mode: 0o644,
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
 			return err
@@ -874,7 +874,7 @@ func createPkgArchive(
 		hdr := &tar.Header{
 			Name:     d + "/",
 			Typeflag: tar.TypeDir,
-			Mode:     0755,
+			Mode:     0o755,
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
 			return err
@@ -916,7 +916,7 @@ func updatePkgRepository(cfVersion string, revision int) error {
 		filtered := filterLines(string(data), func(l string) bool {
 			return !strings.HasPrefix(strings.TrimSpace(l), "data =")
 		})
-		_ = os.WriteFile(metaPath, []byte(filtered), 0644)
+		_ = os.WriteFile(metaPath, []byte(filtered), 0o644)
 	}
 
 	// Extract packagesite.yaml from the zstd-compressed packagesite.pkg.
@@ -935,7 +935,7 @@ func updatePkgRepository(cfVersion string, revision int) error {
 	if err != nil {
 		return fmt.Errorf("patch packagesite.yaml: %w", err)
 	}
-	if err := os.WriteFile(pkgsiteYAML, []byte(updated), 0644); err != nil {
+	if err := os.WriteFile(pkgsiteYAML, []byte(updated), 0o644); err != nil {
 		return err
 	}
 
@@ -1026,7 +1026,7 @@ func publishRepositoryMetadata(repoDir string) error {
 	if err := os.RemoveAll(pkgDst); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(pkgDst, 0755); err != nil {
+	if err := os.MkdirAll(pkgDst, 0o755); err != nil {
 		return err
 	}
 
@@ -1035,14 +1035,14 @@ func publishRepositoryMetadata(repoDir string) error {
 		if _, err := os.Stat(src); err != nil {
 			continue
 		}
-		if err := copyFile(src, filepath.Join(pkgDst, f), 0644); err != nil {
+		if err := copyFile(src, filepath.Join(pkgDst, f), 0o644); err != nil {
 			return err
 		}
 	}
 
 	buildDate := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")
 	headers := fmt.Sprintf("/*\n  Last-Modified: %s\n", buildDate)
-	if err := os.WriteFile(filepath.Join(pkgDst, "_headers"), []byte(headers), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(pkgDst, "_headers"), []byte(headers), 0o644); err != nil {
 		return err
 	}
 
@@ -1080,8 +1080,8 @@ func readRevision() (int, error) {
 }
 
 func saveState(version string, revision int) {
-	_ = os.WriteFile(stateFile, []byte(version+"\n"), 0644)
-	_ = os.WriteFile(revisionFile, []byte(strconv.Itoa(revision)+"\n"), 0644)
+	_ = os.WriteFile(stateFile, []byte(version+"\n"), 0o644)
+	_ = os.WriteFile(revisionFile, []byte(strconv.Itoa(revision)+"\n"), 0o644)
 }
 
 // ---- GitHub ----------------------------------------------------------------
@@ -1173,7 +1173,7 @@ func createZstdTar(archivePath, filePath, nameInArchive string) error {
 	hdr := &tar.Header{
 		Name:    nameInArchive,
 		Size:    info.Size(),
-		Mode:    0644,
+		Mode:    0o644,
 		ModTime: info.ModTime(),
 	}
 	if err := tw.WriteHeader(hdr); err != nil {
@@ -1192,7 +1192,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	}
 	defer in.Close()
 
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
 
