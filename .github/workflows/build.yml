@@ -154,7 +154,7 @@ jobs:
             -version "${VERSION}" \
             -revision "${REVISION}" \
             -repo-dir "${GITHUB_WORKSPACE}" \
-            -pkg-repo-dir _artifact/pkg-repo-build \
+            -pkg-repo-dir _artifact \
             -check-only publish
 
       - name: Skip publish
@@ -169,5 +169,5 @@ jobs:
             -version "${VERSION}" \
             -revision "${REVISION}" \
             -repo-dir "${GITHUB_WORKSPACE}" \
-            -pkg-repo-dir _artifact/pkg-repo-build \
+            -pkg-repo-dir _artifact \
             publish
