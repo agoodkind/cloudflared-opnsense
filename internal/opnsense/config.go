@@ -18,7 +18,7 @@ type Settings struct {
 	Token         string
 	TunnelName    string
 	PostQuantum   bool
-	EdgeIPVersion string // "auto" | "4" | "6"
+	EdgeIPVersion string // "auto" | "ipv4" | "ipv6" (mapped to cloudflared 4/6 at reconfigure)
 	Protocol      string // "auto" | "quic" | "http2"
 	LogLevel      string // "debug" | "info" | "warn" | "error" | "fatal"
 	Tunnels       []Tunnel
@@ -33,11 +33,13 @@ type Tunnel struct {
 	URL      string
 }
 
-// xmlRoot is used only to navigate to the cloudflared section.
-// Keep the root unconstrained so both <opnsense> and <OPNsense> variants
-// can be parsed without case-sensitive failures.
+// xmlRoot maps the config.xml document root (<opnsense>) and navigates to the
+// plugin section. OPNsense nests plugin configuration under an <OPNsense>
+// container, so the real path is opnsense > OPNsense > cloudflared. A bare
+// "cloudflared" tag only matches a direct child of the root, so it silently
+// read nothing and every setting fell back to its default.
 type xmlRoot struct {
-	Cloudflared xmlCloudflared `xml:"cloudflared"`
+	Cloudflared xmlCloudflared `xml:"OPNsense>cloudflared"`
 }
 
 type xmlCloudflared struct {
