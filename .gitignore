@@ -2,6 +2,7 @@
 *.txz
 /cloudflared-*
 package/
+.make/
 
 # Do not ignore cmd/ source directories
 !cmd/
