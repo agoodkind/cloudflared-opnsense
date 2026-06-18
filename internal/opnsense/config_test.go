@@ -140,7 +140,7 @@ func TestReadSettings(t *testing.T) {
         <token>my-secret-token</token>
         <tunnel_name>main</tunnel_name>
         <post_quantum>0</post_quantum>
-        <edge_ip_version>6</edge_ip_version>
+        <edge_ip_version>ipv6</edge_ip_version>
         <protocol>quic</protocol>
         <loglevel>debug</loglevel>
       </general>
@@ -185,8 +185,8 @@ func TestReadSettings(t *testing.T) {
 		if s.PostQuantum != false {
 			t.Errorf("PostQuantum = %v, want false", s.PostQuantum)
 		}
-		if s.EdgeIPVersion != "6" {
-			t.Errorf("EdgeIPVersion = %q, want %q", s.EdgeIPVersion, "6")
+		if s.EdgeIPVersion != "ipv6" {
+			t.Errorf("EdgeIPVersion = %q, want %q", s.EdgeIPVersion, "ipv6")
 		}
 		if s.Protocol != "quic" {
 			t.Errorf("Protocol = %q, want %q", s.Protocol, "quic")

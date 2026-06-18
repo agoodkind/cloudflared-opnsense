@@ -18,7 +18,7 @@ type Settings struct {
 	Token         string
 	TunnelName    string
 	PostQuantum   bool
-	EdgeIPVersion string // "auto" | "4" | "6"
+	EdgeIPVersion string // "auto" | "ipv4" | "ipv6" (mapped to cloudflared 4/6 at reconfigure)
 	Protocol      string // "auto" | "quic" | "http2"
 	LogLevel      string // "debug" | "info" | "warn" | "error" | "fatal"
 	Tunnels       []Tunnel
