@@ -133,6 +133,12 @@
             });
         }
 
+        window.refreshCloudflaredIngressRowsFromApi = function () {
+            return $.getJSON('/api/cloudflared/settings/get', function (data) {
+                renderIngressRows(data);
+            });
+        };
+
         function updateModeUI() {
             var mode = $('#general\\.mode').val();
             var isTokenMode = mode !== 'config';
@@ -201,6 +207,11 @@
         ]);
         $('#DialogTunnel .modal-title').text('{{ lang._('Add Ingress Rule') }}');
         $('#frm_tunnel')[0].reset();
+        $('#tunnel\\.service').val('http');
+        if ($('#tunnel\\.service').data('selectpicker')) {
+            $('#tunnel\\.service').selectpicker('val', 'http');
+            $('#tunnel\\.service').selectpicker('refresh');
+        }
         $('#DialogTunnel').data('uuid', '');
         $('#DialogTunnel').modal('show');
     }
@@ -248,7 +259,9 @@
                     url: '/api/cloudflared/settings/delTunnel/' + uuid,
                     type: 'POST',
                     success: function () {
-                        location.reload();
+                        refreshCloudflaredIngressRowsFromApi().fail(function () {
+                            location.reload();
+                        });
                     }
                 });
             }
@@ -260,7 +273,9 @@
         var url = uuid ? '/api/cloudflared/settings/setTunnel/' + uuid : '/api/cloudflared/settings/addTunnel';
         saveFormToEndpoint(url, 'frm_tunnel', function () {
             $('#DialogTunnel').modal('hide');
-            location.reload();
+            refreshCloudflaredIngressRowsFromApi().fail(function () {
+                location.reload();
+            });
         }, true, function () {
             // keep inline validation inside the modal without stacking another warning dialog
         });

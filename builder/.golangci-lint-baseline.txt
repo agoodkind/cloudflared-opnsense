@@ -1,0 +1,2 @@
+# golangci-lint: generated_at=2026-06-17T22:32:51Z
+publish.go:327:28: G702: Command injection via taint analysis (gosec)	# golangci-lint:first_added=2026-06-17T22:32:51Z last_seen=2026-06-17T22:32:51Z

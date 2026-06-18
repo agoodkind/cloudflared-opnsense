@@ -1,6 +1,9 @@
 name: Build FreeBSD packages
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
@@ -15,37 +18,22 @@ jobs:
       version: ${{ steps.check.outputs.version }}
       revision: ${{ steps.check.outputs.revision }}
     steps:
+      - uses: actions/checkout@v6.0.3
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: builder/go.mod
+
       - name: Decide version and revision
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-
-          LATEST="$(curl -sL \
-            https://api.github.com/repos/cloudflare/cloudflared/releases/latest \
-            | jq -r .tag_name)"
-
-          # Derive the highest published revision for this upstream version
-          # directly from GitHub release tags, which are the authoritative source of truth.
-          LAST_REV="$(gh release list \
-            --repo agoodkind/cloudflared-opnsense \
-            --limit 100 \
-            --json tagName \
-            --jq ".[] | .tagName | select(startswith(\"${LATEST}-freebsd-r\"))" \
-            | sed "s/${LATEST}-freebsd-r//" \
-            | sort -n \
-            | tail -1)"
-          LAST_REV="${LAST_REV:-0}"
-
-          REV=$((LAST_REV + 1))
-
-          echo "version=${LATEST}" >> "${GITHUB_OUTPUT}"
-          echo "revision=${REV}" >> "${GITHUB_OUTPUT}"
-          echo "Upstream: ${LATEST}  Last published revision: ${LAST_REV}  Building: r${REV}"
+        run: cd builder && go run . -repo-dir "${GITHUB_WORKSPACE}" plan
 
   test:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6.0.3
 
@@ -53,23 +41,24 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: go vet
+      - name: Root module vet
         run: go vet ./...
 
-      - name: go test
+      - name: Root module test
         run: go test -race -count=1 ./...
 
-      - name: Cross-compile for FreeBSD (build gate)
+      - name: Cross-compile cloudflared-configd for FreeBSD
         run: |
           GOOS=freebsd GOARCH=amd64 \
-            go build -buildvcs=false ./cmd/cloudflared-builder ./cmd/cloudflared-configd
+            go build -trimpath -buildvcs=false ./cmd/cloudflared-configd
 
-      - name: shellcheck CI scripts
+      - name: Builder module gate (go-makefile)
+        run: cd builder && make check
+
+      - name: Cross-compile cloudflared-builder for FreeBSD
         run: |
-          sudo apt-get install -y -qq shellcheck
-          shellcheck --severity=error \
-            scripts/ci/upload-r2.sh \
-            scripts/ci/create-release.sh
+          cd builder && GOOS=freebsd GOARCH=amd64 \
+            go build -trimpath -buildvcs=false -o /dev/null .
 
   build:
     needs: [check, test]
@@ -96,46 +85,32 @@ jobs:
             git config --global --add safe.directory "${REPO_DIR}"
 
             rm -rf "${WORK_DIR}" "${PKG_REPO_DIR}"
-            mkdir -p "${WORK_DIR}" "${PKG_REPO_DIR}/All"
+            mkdir -p "${WORK_DIR}" "${PKG_REPO_DIR}/All" "${REPO_DIR}/dist"
 
-            # Build the builder and configd binaries natively on FreeBSD.
-            # -buildvcs=false avoids git safe-directory issues in the VM.
+            # Build configd (root module) and the builder (its own module) with
+            # reproducible flags so installed-file hashes reflect source, not the
+            # build path or VCS stamp.
             cd "${REPO_DIR}"
-            go build -buildvcs=false -o dist/cloudflared-builder ./cmd/cloudflared-builder
-            go build -buildvcs=false -o dist/cloudflared-configd  ./cmd/cloudflared-configd
+            go build -trimpath -buildvcs=false -o dist/cloudflared-configd ./cmd/cloudflared-configd
+            cd "${REPO_DIR}/builder"
+            go build -trimpath -buildvcs=false -o "${REPO_DIR}/dist/cloudflared-builder" .
 
             # Run the Go builder for deterministic build/package/repo steps.
-            "${REPO_DIR}/dist/cloudflared-builder" \
-              -version "${CF_VERSION}" \
-              -revision "${CF_REVISION}" \
-              -repo-dir "${REPO_DIR}" \
-              -work-dir "${WORK_DIR}" \
-              -pkg-repo-dir "${PKG_REPO_DIR}" \
-              build
-
-            "${REPO_DIR}/dist/cloudflared-builder" \
-              -version "${CF_VERSION}" \
-              -revision "${CF_REVISION}" \
-              -repo-dir "${REPO_DIR}" \
-              -work-dir "${WORK_DIR}" \
-              -pkg-repo-dir "${PKG_REPO_DIR}" \
-              package
-
-            "${REPO_DIR}/dist/cloudflared-builder" \
-              -version "${CF_VERSION}" \
-              -revision "${CF_REVISION}" \
-              -repo-dir "${REPO_DIR}" \
-              -work-dir "${WORK_DIR}" \
-              -pkg-repo-dir "${PKG_REPO_DIR}" \
-              repo
+            for stage in build package repo; do
+              "${REPO_DIR}/dist/cloudflared-builder" \
+                -version "${CF_VERSION}" \
+                -revision "${CF_REVISION}" \
+                -repo-dir "${REPO_DIR}" \
+                -work-dir "${WORK_DIR}" \
+                -pkg-repo-dir "${PKG_REPO_DIR}" \
+                "${stage}"
+            done
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7.0.1
         with:
           name: pkg-build
-          path: |
-            pkg-repo-build
-            pkg
+          path: pkg-repo-build
 
   publish:
     needs: [check, build]
@@ -149,11 +124,17 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: auto
       GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.check.outputs.version }}
+      REVISION: ${{ needs.check.outputs.revision }}
     steps:
       - uses: actions/checkout@v6.0.3
         with:
           token: ${{ github.token }}
           fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: builder/go.mod
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8.0.1
@@ -161,14 +142,32 @@ jobs:
           name: pkg-build
           path: _artifact
 
-      - name: Upload packages and metadata to R2
-        env:
-          ARTIFACT_DIR: _artifact
-        run: bash scripts/ci/upload-r2.sh
+      - name: Build the publisher
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/dist"
+          cd builder && go build -trimpath -buildvcs=false -o "${GITHUB_WORKSPACE}/dist/cloudflared-builder" .
 
-      - name: Create GitHub release
-        env:
-          VERSION: ${{ needs.check.outputs.version }}
-          REVISION: ${{ needs.check.outputs.revision }}
-          ARTIFACT_DIR: _artifact
-        run: bash scripts/ci/create-release.sh
+      - name: Decide whether publish is needed
+        id: publish_decision
+        run: |
+          dist/cloudflared-builder \
+            -version "${VERSION}" \
+            -revision "${REVISION}" \
+            -repo-dir "${GITHUB_WORKSPACE}" \
+            -pkg-repo-dir _artifact/pkg-repo-build \
+            -check-only publish
+
+      - name: Skip publish
+        if: steps.publish_decision.outputs.should_publish != 'true'
+        run: |
+          echo "Skipping publish: ${{ steps.publish_decision.outputs.publish_reason }}"
+
+      - name: Publish to R2 and create the GitHub release
+        if: steps.publish_decision.outputs.should_publish == 'true'
+        run: |
+          dist/cloudflared-builder \
+            -version "${VERSION}" \
+            -revision "${REVISION}" \
+            -repo-dir "${GITHUB_WORKSPACE}" \
+            -pkg-repo-dir _artifact/pkg-repo-build \
+            publish

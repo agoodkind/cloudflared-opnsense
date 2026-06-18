@@ -58,19 +58,19 @@ GitHub Actions provides everything else. No persistent build host is required.
 
 ## Building
 
+The OPNsense plugin and the `cloudflared-configd` runtime binary live in the repo-root module under the BSD `Makefile` (`Mk/plugins.mk`, `install`, `metadata`, `opnsense-package`). The build/package/publish orchestrator is a separate Go module, `goodkind.io/cloudflared-builder`, under `builder/`, driven by the central go-makefile pipeline.
+
 ### Local development
 
 ```bash
-# Build Go binaries for the host platform (dev/test).
+# Plugin runtime (configd) for the host, reproducible flags. Root module, BSD make.
 make build
 
-# Cross-compile both binaries for FreeBSD amd64.
-# This is what CI uses as the test gate before paying for the FreeBSD VM step.
+# Cross-compile configd for FreeBSD amd64.
 make freebsd
 
-# Lint and format.
-make lint
-make fmt
+# Orchestrator module: full lint + test gate (go-makefile), and host build.
+cd builder && make check
 ```
 
 ### CI build pipeline
@@ -78,25 +78,33 @@ make fmt
 `.github/workflows/build.yml` runs on:
 
 - Cron every 6 hours (polls upstream for new cloudflared releases)
+- Pushes to `main` (test + build, publish only when package content changed)
 - `workflow_dispatch` (manual trigger)
 - Every PR (test + build, no publish)
 
 Stages:
 
-1. **`check`** (Ubuntu): Queries the GitHub API for the latest cloudflared release. Derives the next FreeBSD revision number from existing release tags. No persistent state.
-2. **`test`** (Ubuntu): `go vet`, `go test -race`, cross-compile for FreeBSD as a build gate, shellcheck on CI scripts.
-3. **`build`** (Ubuntu host with `vmactions/freebsd-vm@v1.4.3` running FreeBSD 14.2): Builds `cloudflared-builder` and `cloudflared-configd` natively in the FreeBSD VM. Runs the builder's `build`, `package`, and `repo` subcommands to produce pkg(8) packages.
-4. **`publish`** (Ubuntu, skipped on PRs): Uploads packages and metadata to R2 via `scripts/ci/upload-r2.sh`. Cuts a tagged GitHub release via `scripts/ci/create-release.sh`.
+1. **`check`** (Ubuntu): runs `cloudflared-builder plan`, which queries the GitHub API for the latest cloudflared release and derives the next FreeBSD revision from existing release tags. No persistent state.
+2. **`test`** (Ubuntu): root-module `go vet` and `go test -race`, cross-compile `cloudflared-configd` for FreeBSD, the `builder/` go-makefile gate (`make check`), and a FreeBSD cross-compile of the builder.
+3. **`build`** (Ubuntu host with `vmactions/freebsd-vm@v1.4.6` running FreeBSD 14.2): builds `cloudflared-configd` (root module) and `cloudflared-builder` (its module) with `-trimpath -buildvcs=false`, then runs the builder's `build`, `package`, and `repo` subcommands to produce pkg(8) packages.
+4. **`publish`** (Ubuntu, skipped on PRs): runs `cloudflared-builder publish`, which compares each package's normalized `+MANIFEST` content against the latest release for the same upstream version and, only when the binary or plugin package content changed, uploads packages and metadata to R2 and cuts a tagged GitHub release.
 
-### Builder binary subcommands (run inside the FreeBSD VM in CI)
+### Meaningful content change
+
+Publish is gated per package on a content fingerprint that is robust to build nondeterminism. Each package's `+MANIFEST` is normalized by dropping version- and revision-identity fields (`version`, `annotations.product_version`, `annotations.product_hash`, and the `/usr/local/opnsense/version/cloudflared` stamp) and hashed. A new release is cut when there is no prior release for the upstream version, or when the binary or plugin fingerprint differs from the latest release. Reproducible builds (`-trimpath -buildvcs=false`, plus the cloudflared build pinned to the upstream commit date) make identical source produce identical installed files, so a fingerprint change reflects a real content change rather than rebuild noise.
+
+### Builder binary subcommands
 
 ```bash
-./dist/cloudflared-builder check      # Is a new version available?
-./dist/cloudflared-builder build      # Clone + patch + compile.
-./dist/cloudflared-builder package    # Create pkg(8) packages.
-./dist/cloudflared-builder repo       # Regenerate pkg repository index.
-./dist/cloudflared-builder run        # All of the above.
-./dist/cloudflared-builder -force run # Force rebuild with incremented revision.
+cd builder && go build -trimpath -buildvcs=false -o ../dist/cloudflared-builder .
+
+./dist/cloudflared-builder plan              # Print version + next revision.
+./dist/cloudflared-builder build             # Clone + patch + compile.
+./dist/cloudflared-builder package           # Create pkg(8) packages.
+./dist/cloudflared-builder repo              # Regenerate pkg repository index.
+./dist/cloudflared-builder -check-only publish # Emit the publish decision only.
+./dist/cloudflared-builder publish           # Publish to R2 + GitHub release if content changed.
+./dist/cloudflared-builder run               # check → build → package → repo → publish.
 ```
 
 These can also be invoked locally on a FreeBSD host for debugging, but the canonical path is the GHA workflow.
@@ -155,6 +163,6 @@ ssh agoodkind@3d06:bad:b01::1 '/usr/local/bin/cloudflared-configd version'
 
 ```bash
 # On a FreeBSD 14.x host with go + gmake + git:
-go build -o dist/cloudflared-builder ./cmd/cloudflared-builder
-./dist/cloudflared-builder -version <version> -revision <rev> build
+cd builder && go build -trimpath -buildvcs=false -o ../dist/cloudflared-builder .
+cd .. && ./dist/cloudflared-builder -version <version> -revision <rev> build
 ```
