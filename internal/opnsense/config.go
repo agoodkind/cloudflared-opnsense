@@ -33,11 +33,13 @@ type Tunnel struct {
 	URL      string
 }
 
-// xmlRoot is used only to navigate to the cloudflared section.
-// Keep the root unconstrained so both <opnsense> and <OPNsense> variants
-// can be parsed without case-sensitive failures.
+// xmlRoot maps the config.xml document root (<opnsense>) and navigates to the
+// plugin section. OPNsense nests plugin configuration under an <OPNsense>
+// container, so the real path is opnsense > OPNsense > cloudflared. A bare
+// "cloudflared" tag only matches a direct child of the root, so it silently
+// read nothing and every setting fell back to its default.
 type xmlRoot struct {
-	Cloudflared xmlCloudflared `xml:"cloudflared"`
+	Cloudflared xmlCloudflared `xml:"OPNsense>cloudflared"`
 }
 
 type xmlCloudflared struct {

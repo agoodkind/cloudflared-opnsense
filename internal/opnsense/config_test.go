@@ -89,12 +89,14 @@ func TestReadSettings(t *testing.T) {
 	})
 	t.Run("minimal_defaults", func(t *testing.T) {
 		xmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
-<OPNsense>
-  <cloudflared>
-    <general/>
-    <tunnels/>
-  </cloudflared>
-</OPNsense>
+<opnsense>
+  <OPNsense>
+    <cloudflared>
+      <general/>
+      <tunnels/>
+    </cloudflared>
+  </OPNsense>
+</opnsense>
 `
 		path := filepath.Join(t.TempDir(), "config.xml")
 		if err := os.WriteFile(path, []byte(xmlDoc), 0o644); err != nil {
@@ -128,34 +130,37 @@ func TestReadSettings(t *testing.T) {
 	})
 	t.Run("fully_populated_two_tunnels", func(t *testing.T) {
 		xmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
-<OPNsense>
-  <cloudflared>
-    <general>
-      <enabled>1</enabled>
-      <mode>config</mode>
-      <token>my-secret-token</token>
-      <tunnel_name>main</tunnel_name>
-      <post_quantum>0</post_quantum>
-      <edge_ip_version>6</edge_ip_version>
-      <protocol>quic</protocol>
-      <loglevel>debug</loglevel>
-    </general>
-    <tunnels>
-      <tunnel uuid="abc">
+<opnsense>
+  <system><hostname>router-test</hostname></system>
+  <OPNsense>
+    <cloudflared>
+      <general>
         <enabled>1</enabled>
-        <hostname>a.example.com</hostname>
-        <service>https</service>
-        <url>http://127.0.0.1:8080</url>
-      </tunnel>
-      <tunnel uuid="def">
-        <enabled>0</enabled>
-        <hostname>b.example.com</hostname>
-        <service>tcp</service>
-        <url>localhost:22</url>
-      </tunnel>
-    </tunnels>
-  </cloudflared>
-</OPNsense>
+        <mode>config</mode>
+        <token>my-secret-token</token>
+        <tunnel_name>main</tunnel_name>
+        <post_quantum>0</post_quantum>
+        <edge_ip_version>6</edge_ip_version>
+        <protocol>quic</protocol>
+        <loglevel>debug</loglevel>
+      </general>
+      <tunnels>
+        <tunnel uuid="abc">
+          <enabled>1</enabled>
+          <hostname>a.example.com</hostname>
+          <service>https</service>
+          <url>http://127.0.0.1:8080</url>
+        </tunnel>
+        <tunnel uuid="def">
+          <enabled>0</enabled>
+          <hostname>b.example.com</hostname>
+          <service>tcp</service>
+          <url>localhost:22</url>
+        </tunnel>
+      </tunnels>
+    </cloudflared>
+  </OPNsense>
+</opnsense>
 `
 		path := filepath.Join(t.TempDir(), "config.xml")
 		if err := os.WriteFile(path, []byte(xmlDoc), 0o644); err != nil {
@@ -201,18 +206,20 @@ func TestReadSettings(t *testing.T) {
 	})
 	t.Run("tunnel_service_defaults_http", func(t *testing.T) {
 		xmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
-<OPNsense>
-  <cloudflared>
-    <general/>
-    <tunnels>
-      <tunnel uuid="only">
-        <enabled>1</enabled>
-        <hostname>h.example.com</hostname>
-        <url>http://127.0.0.1</url>
-      </tunnel>
-    </tunnels>
-  </cloudflared>
-</OPNsense>
+<opnsense>
+  <OPNsense>
+    <cloudflared>
+      <general/>
+      <tunnels>
+        <tunnel uuid="only">
+          <enabled>1</enabled>
+          <hostname>h.example.com</hostname>
+          <url>http://127.0.0.1</url>
+        </tunnel>
+      </tunnels>
+    </cloudflared>
+  </OPNsense>
+</opnsense>
 `
 		path := filepath.Join(t.TempDir(), "config.xml")
 		if err := os.WriteFile(path, []byte(xmlDoc), 0o644); err != nil {
@@ -231,18 +238,20 @@ func TestReadSettings(t *testing.T) {
 	})
 	t.Run("tunnel_enabled_defaults_true_when_empty", func(t *testing.T) {
 		xmlDoc := `<?xml version="1.0" encoding="UTF-8"?>
-<OPNsense>
-  <cloudflared>
-    <general/>
-    <tunnels>
-      <tunnel uuid="e1">
-        <hostname>h.example.com</hostname>
-        <service>http</service>
-        <url>http://127.0.0.1</url>
-      </tunnel>
-    </tunnels>
-  </cloudflared>
-</OPNsense>
+<opnsense>
+  <OPNsense>
+    <cloudflared>
+      <general/>
+      <tunnels>
+        <tunnel uuid="e1">
+          <hostname>h.example.com</hostname>
+          <service>http</service>
+          <url>http://127.0.0.1</url>
+        </tunnel>
+      </tunnels>
+    </cloudflared>
+  </OPNsense>
+</opnsense>
 `
 		path := filepath.Join(t.TempDir(), "config.xml")
 		if err := os.WriteFile(path, []byte(xmlDoc), 0o644); err != nil {
