@@ -4,8 +4,8 @@
         <label>Enable</label>
         <type>checkbox</type>
         <help>
-            Start the Cloudflare Tunnel service and include it in the generated
-            runtime configuration when you apply changes.
+            Run the Cloudflare Tunnel and start it automatically at boot.
+            Apply changes to update the running service.
         </help>
     </field>
     <field>
@@ -13,9 +13,11 @@
         <label>Mode</label>
         <type>dropdown</type>
         <help>
-            Token mode uses a Cloudflare-managed tunnel token from Zero Trust
-            and ignores local ingress rules. Config File mode writes a local
-            cloudflared config file and uses the ingress rules from the
+            Choose how the tunnel is defined. Token mode connects a
+            Cloudflare-managed tunnel using a token from the Zero Trust
+            dashboard, where you also set its public hostnames and routes;
+            local ingress rules are not used. Config File mode defines the
+            tunnel on this firewall and routes traffic with the rules on the
             Ingress Rules tab.
         </help>
     </field>
@@ -25,8 +27,7 @@
         <type>password</type>
         <help>
             Paste the tunnel token from the Cloudflare Zero Trust dashboard.
-            This is only required in Token mode and is written to the local
-            token file on apply.
+            Required in Token mode.
         </help>
     </field>
     <field>
@@ -34,8 +35,8 @@
         <label>Tunnel Name</label>
         <type>text</type>
         <help>
-            Friendly name for the tunnel. In Config File mode this becomes the
-            tunnel name written into the generated cloudflared config.
+            Name for the tunnel. In Config File mode, this name is written
+            into the generated configuration.
         </help>
     </field>
     <field>
@@ -43,9 +44,8 @@
         <label>Post-Quantum</label>
         <type>checkbox</type>
         <help>
-            Enable Cloudflare's post-quantum option for tunnel connections.
-            Leave this enabled unless you need to troubleshoot compatibility
-            with an older environment.
+            Use post-quantum cryptography for tunnel connections. Keep this on
+            unless an older environment has trouble connecting.
         </help>
     </field>
     <field>
@@ -53,8 +53,8 @@
         <label>Edge IP Version</label>
         <type>dropdown</type>
         <help>
-            Choose whether cloudflared should prefer IPv4, prefer IPv6, or let
-            Cloudflare decide automatically when connecting to the edge.
+            Prefer IPv4, prefer IPv6, or let Cloudflare choose when connecting
+            to its edge.
         </help>
     </field>
     <field>
@@ -62,8 +62,8 @@
         <label>Protocol</label>
         <type>dropdown</type>
         <help>
-            Choose the transport protocol used between cloudflared and the
-            Cloudflare edge. Auto is usually the best default.
+            Transport protocol between cloudflared and the Cloudflare edge.
+            Auto works best for most setups.
         </help>
     </field>
     <field>
@@ -71,8 +71,8 @@
         <label>Log Level</label>
         <type>dropdown</type>
         <help>
-            Set the verbosity written to the cloudflared log file. Use Info for
-            normal operation and Debug only when gathering troubleshooting data.
+            Amount of detail written to the cloudflared log. Use Info for
+            normal operation, and Debug only while troubleshooting.
         </help>
     </field>
 </form>

@@ -293,7 +293,7 @@
     </div>
 
     <div id="ingress" class="tab-pane fade in">
-        <div class="content-box-main">
+        <div class="content-box-main" style="padding: 15px;">
             <div id="ingressModeHint" class="alert alert-info" role="alert" style="margin-bottom: 15px; display: none;">
                 {{ lang._('Ingress rules are only used in Config File mode.') }}
                 {{ lang._('Switch the tunnel mode to Config File if you want the plugin to generate a local cloudflared config and manage origin mappings here.') }}

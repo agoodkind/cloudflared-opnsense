@@ -4,8 +4,7 @@
         <label>Enabled</label>
         <type>checkbox</type>
         <help>
-            Enable or disable this individual ingress rule without deleting it
-            from the locally-managed tunnel definition.
+            Turn this rule on or off without removing it.
         </help>
     </field>
     <field>
@@ -13,7 +12,7 @@
         <label>Hostname</label>
         <type>text</type>
         <help>
-            Public hostname served by Cloudflare for this origin, for example
+            Public hostname Cloudflare serves for this origin, such as
             <code>app.example.com</code>.
         </help>
     </field>
@@ -22,8 +21,8 @@
         <label>Service Type</label>
         <type>dropdown</type>
         <help>
-            Protocol expected by the origin service behind the tunnel, such as
-            HTTP, HTTPS, TCP, SSH, or RDP.
+            Protocol the origin service speaks, such as HTTP, HTTPS, TCP, SSH,
+            or RDP.
         </help>
     </field>
     <field>
@@ -31,8 +30,8 @@
         <label>Origin URL</label>
         <type>text</type>
         <help>
-            Local origin target that cloudflared should reach for this rule,
-            for example <code>http://127.0.0.1:8080</code> or
+            Local address cloudflared connects to for this rule, such as
+            <code>http://127.0.0.1:8080</code> or
             <code>tcp://127.0.0.1:22</code>.
         </help>
     </field>
