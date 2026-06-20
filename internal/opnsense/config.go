@@ -17,6 +17,9 @@ type Settings struct {
 	Mode          string // "token" | "config"
 	Token         string
 	TunnelName    string
+	AccountTag    string
+	TunnelID      string
+	TunnelSecret  string
 	PostQuantum   bool
 	EdgeIPVersion string // "auto" | "ipv4" | "ipv6" (mapped to cloudflared 4/6 at reconfigure)
 	Protocol      string // "auto" | "quic" | "http2"
@@ -54,6 +57,9 @@ type xmlGeneral struct {
 	Mode          string `xml:"mode"`
 	Token         string `xml:"token"`
 	TunnelName    string `xml:"tunnel_name"`
+	AccountTag    string `xml:"account_tag"`
+	TunnelID      string `xml:"tunnel_id"`
+	TunnelSecret  string `xml:"tunnel_secret"`
 	PostQuantum   string `xml:"post_quantum"`
 	EdgeIPVersion string `xml:"edge_ip_version"`
 	Protocol      string `xml:"protocol"`
@@ -102,6 +108,9 @@ func ReadSettings(path string) (*Settings, error) {
 		Mode:          strField(g.Mode, "token"),
 		Token:         g.Token,
 		TunnelName:    g.TunnelName,
+		AccountTag:    g.AccountTag,
+		TunnelID:      g.TunnelID,
+		TunnelSecret:  g.TunnelSecret,
 		PostQuantum:   boolField(g.PostQuantum, "1"),
 		EdgeIPVersion: strField(g.EdgeIPVersion, "auto"),
 		Protocol:      strField(g.Protocol, "auto"),

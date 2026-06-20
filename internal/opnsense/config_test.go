@@ -139,6 +139,9 @@ func TestReadSettings(t *testing.T) {
         <mode>config</mode>
         <token>my-secret-token</token>
         <tunnel_name>main</tunnel_name>
+        <account_tag>account-tag-value</account_tag>
+        <tunnel_id>11111111-2222-3333-4444-555555555555</tunnel_id>
+        <tunnel_secret>base64-secret-value</tunnel_secret>
         <post_quantum>0</post_quantum>
         <edge_ip_version>ipv6</edge_ip_version>
         <protocol>quic</protocol>
@@ -181,6 +184,15 @@ func TestReadSettings(t *testing.T) {
 		}
 		if s.TunnelName != "main" {
 			t.Errorf("TunnelName = %q, want %q", s.TunnelName, "main")
+		}
+		if s.AccountTag != "account-tag-value" {
+			t.Errorf("AccountTag = %q, want %q", s.AccountTag, "account-tag-value")
+		}
+		if s.TunnelID != "11111111-2222-3333-4444-555555555555" {
+			t.Errorf("TunnelID = %q, want %q", s.TunnelID, "11111111-2222-3333-4444-555555555555")
+		}
+		if s.TunnelSecret != "base64-secret-value" {
+			t.Errorf("TunnelSecret = %q, want %q", s.TunnelSecret, "base64-secret-value")
 		}
 		if s.PostQuantum != false {
 			t.Errorf("PostQuantum = %v, want false", s.PostQuantum)

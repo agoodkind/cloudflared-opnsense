@@ -82,6 +82,43 @@ func Test_filterLines(t *testing.T) {
 	})
 }
 
+func Test_pluginManifestWithCloudflaredDependency(t *testing.T) {
+	t.Parallel()
+
+	manifest := strings.Join([]string{
+		"name: os-cloudflared",
+		"version: \"2026.1.1_999\"",
+		"origin: opnsense/os-cloudflared",
+		"prefix: /usr/local",
+		"",
+	}, "\n")
+
+	parsed := parseUCLManifest(
+		pluginManifestWithCloudflaredDependency(manifest, "2026.1.1"),
+	)
+
+	rawDeps, ok := parsed["deps"]
+	if !ok {
+		t.Fatal("missing deps in parsed manifest")
+	}
+
+	var deps map[string]packageDependency
+	if err := json.Unmarshal(rawDeps, &deps); err != nil {
+		t.Fatalf("unmarshal deps: %v", err)
+	}
+
+	dependency, ok := deps["cloudflared"]
+	if !ok {
+		t.Fatalf("deps = %v, want cloudflared", deps)
+	}
+	if dependency.Version != "2026.1.1" {
+		t.Fatalf("cloudflared version = %q, want 2026.1.1", dependency.Version)
+	}
+	if dependency.Origin != "net/cloudflared" {
+		t.Fatalf("cloudflared origin = %q, want net/cloudflared", dependency.Origin)
+	}
+}
+
 func ndjsonLine(obj map[string]any) string {
 	b, err := json.Marshal(obj)
 	if err != nil {
