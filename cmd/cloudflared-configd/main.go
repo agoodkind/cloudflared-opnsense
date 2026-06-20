@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/agoodkind/cloudflared-opnsense/internal/opnsense"
@@ -49,6 +50,10 @@ var defaultRuntimePaths = runtimePaths{
 	configFile:      defaultConfigDir + "/config.yml",
 	credentialsFile: defaultConfigDir + "/credentials.json",
 }
+
+var uuidPattern = regexp.MustCompile(
+	`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`,
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -99,10 +104,8 @@ func applySettings(
 	writeRC rcConfWriter,
 	manage serviceManager,
 ) error {
-	if s.Enabled && s.Mode == "config" {
-		if err := validateTunnelCredentials(s); err != nil {
-			return err
-		}
+	if err := validateEnabledSettings(s); err != nil {
+		return err
 	}
 
 	if err := os.MkdirAll(paths.configDir, 0700); err != nil {
@@ -224,6 +227,20 @@ func renderCredentialsJSON(s *opnsense.Settings) (string, error) {
 	return string(data), nil
 }
 
+func validateEnabledSettings(s *opnsense.Settings) error {
+	if !s.Enabled {
+		return nil
+	}
+
+	if s.Mode == "token" && strings.TrimSpace(s.Token) == "" {
+		return fmt.Errorf("token is required in Token mode")
+	}
+	if s.Mode == "config" {
+		return validateTunnelCredentials(s)
+	}
+	return nil
+}
+
 func hasTunnelCredentials(s *opnsense.Settings) bool {
 	return strings.TrimSpace(s.AccountTag) != "" &&
 		strings.TrimSpace(s.TunnelID) != "" &&
@@ -236,6 +253,9 @@ func validateTunnelCredentials(s *opnsense.Settings) error {
 	}
 	if strings.TrimSpace(s.TunnelID) == "" {
 		return fmt.Errorf("tunnel_id is required in Config File mode")
+	}
+	if !uuidPattern.MatchString(strings.TrimSpace(s.TunnelID)) {
+		return fmt.Errorf("tunnel_id must be a UUID in Config File mode")
 	}
 	if strings.TrimSpace(s.TunnelSecret) == "" {
 		return fmt.Errorf("tunnel_secret is required in Config File mode")

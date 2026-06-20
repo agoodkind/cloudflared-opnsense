@@ -119,6 +119,41 @@ func Test_pluginManifestWithCloudflaredDependency(t *testing.T) {
 	}
 }
 
+func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
+	t.Parallel()
+
+	ucl := strings.Join([]string{
+		"name: os-cloudflared",
+		"deps: {",
+		`    cloudflared: { version: "2026.6.0", origin: "net/cloudflared" }`,
+		"}",
+		"",
+	}, "\n")
+
+	manifest := parseUCLManifest(ucl)
+
+	rawDeps, ok := manifest["deps"]
+	if !ok {
+		t.Fatal("missing deps in parsed manifest")
+	}
+
+	var deps map[string]packageDependency
+	if err := json.Unmarshal(rawDeps, &deps); err != nil {
+		t.Fatalf("unmarshal deps: %v", err)
+	}
+
+	dependency, ok := deps["cloudflared"]
+	if !ok {
+		t.Fatalf("deps = %v, want cloudflared", deps)
+	}
+	if dependency.Version != "2026.6.0" {
+		t.Fatalf("cloudflared version = %q, want 2026.6.0", dependency.Version)
+	}
+	if dependency.Origin != "net/cloudflared" {
+		t.Fatalf("cloudflared origin = %q, want net/cloudflared", dependency.Origin)
+	}
+}
+
 func ndjsonLine(obj map[string]any) string {
 	b, err := json.Marshal(obj)
 	if err != nil {

@@ -263,6 +263,26 @@ func Test_renderCredentialsJSON(t *testing.T) {
 	}
 }
 
+func Test_validateEnabledSettings(t *testing.T) {
+	t.Run("disabled token mode allows empty token", func(t *testing.T) {
+		settings := &opnsense.Settings{Enabled: false, Mode: "token", Token: ""}
+		if err := validateEnabledSettings(settings); err != nil {
+			t.Fatalf("validateEnabledSettings: %v", err)
+		}
+	})
+
+	t.Run("enabled token mode requires token", func(t *testing.T) {
+		settings := &opnsense.Settings{Enabled: true, Mode: "token", Token: " \n "}
+		err := validateEnabledSettings(settings)
+		if err == nil {
+			t.Fatal("expected token validation error")
+		}
+		if !strings.Contains(err.Error(), "token") {
+			t.Fatalf("error %q does not mention token", err.Error())
+		}
+	})
+}
+
 func Test_applySettingsConfigMode(t *testing.T) {
 	t.Run("writes credentials and config before managing enabled service", func(t *testing.T) {
 		paths := testRuntimePaths(t.TempDir())
@@ -380,6 +400,13 @@ func Test_applySettingsConfigMode(t *testing.T) {
 				tunnelID:      testTunnelID,
 				wantSubstring: "tunnel_secret",
 			},
+			{
+				name:          "invalid tunnel id",
+				accountTag:    "account-tag-value",
+				tunnelID:      "not-a-uuid",
+				tunnelSecret:  "secret-value",
+				wantSubstring: "UUID",
+			},
 		}
 
 		for _, tc := range cases {
@@ -462,6 +489,47 @@ func Test_applySettingsConfigMode(t *testing.T) {
 		}
 		if _, statErr := os.Stat(paths.configFile); !errors.Is(statErr, fs.ErrNotExist) {
 			t.Fatalf("config stat err = %v, want not exist", statErr)
+		}
+	})
+}
+
+func Test_applySettingsTokenMode(t *testing.T) {
+	t.Run("enabled token mode with empty token fails before side effects", func(t *testing.T) {
+		paths := testRuntimePaths(t.TempDir())
+		rcCalled := false
+		manageCalled := false
+		settings := &opnsense.Settings{
+			Enabled: true,
+			Mode:    "token",
+			Token:   " \n ",
+		}
+
+		err := applySettings(
+			settings,
+			paths,
+			func(string, map[string]string) error {
+				rcCalled = true
+				return nil
+			},
+			func(bool) error {
+				manageCalled = true
+				return nil
+			},
+		)
+		if err == nil {
+			t.Fatal("expected token validation error")
+		}
+		if !strings.Contains(err.Error(), "token") {
+			t.Fatalf("error %q does not mention token", err.Error())
+		}
+		if rcCalled {
+			t.Fatal("rc writer was called before token validation failed")
+		}
+		if manageCalled {
+			t.Fatal("service manager was called before token validation failed")
+		}
+		if _, statErr := os.Stat(paths.configDir); !errors.Is(statErr, fs.ErrNotExist) {
+			t.Fatalf("config dir stat err = %v, want not exist", statErr)
 		}
 	})
 }

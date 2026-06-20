@@ -61,20 +61,73 @@ func parseDepsBlock(
 		if line == "}" {
 			return deps, lineIndex, true
 		}
-		if !strings.HasSuffix(line, "{") {
-			continue
-		}
-
-		name := strings.TrimSpace(strings.TrimSuffix(line, "{"))
-		name = strings.TrimSpace(strings.TrimSuffix(name, ":"))
-		name = strings.Trim(name, "\"")
-		dependency, nextLineIndex, ok := parseDependencyBlock(lines, lineIndex)
+		name, dependency, nextLineIndex, ok := parseDependencyLine(lines, lineIndex)
 		if ok && name != "" {
 			deps[name] = dependency
 			lineIndex = nextLineIndex
 		}
 	}
 	return nil, startLineIndex, false
+}
+
+func parseDependencyLine(
+	lines []string,
+	startLineIndex int,
+) (string, packageDependency, int, bool) {
+	line := strings.TrimSpace(lines[startLineIndex])
+	if strings.Contains(line, "{") && strings.Contains(line, "}") {
+		name, dependency, ok := parseInlineDependencyLine(line)
+		if ok {
+			return name, dependency, startLineIndex, true
+		}
+	}
+	if !strings.HasSuffix(line, "{") {
+		return "", packageDependency{}, startLineIndex, false
+	}
+
+	name := strings.TrimSpace(strings.TrimSuffix(line, "{"))
+	name = strings.TrimSpace(strings.TrimSuffix(name, ":"))
+	name = strings.Trim(name, "\"")
+	dependency, nextLineIndex, ok := parseDependencyBlock(lines, startLineIndex)
+	if !ok || name == "" {
+		return "", packageDependency{}, startLineIndex, false
+	}
+	return name, dependency, nextLineIndex, true
+}
+
+func parseInlineDependencyLine(line string) (string, packageDependency, bool) {
+	name, body, found := strings.Cut(line, ":")
+	if !found {
+		return "", packageDependency{}, false
+	}
+	name = strings.Trim(strings.TrimSpace(name), "\"")
+	body = strings.TrimSpace(body)
+	body = strings.TrimSuffix(body, ",")
+	if !strings.HasPrefix(body, "{") || !strings.HasSuffix(body, "}") {
+		return "", packageDependency{}, false
+	}
+
+	body = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(body, "{"), "}"))
+	dependency := packageDependency{}
+	for field := range strings.SplitSeq(body, ",") {
+		key, value, found := strings.Cut(field, ":")
+		if !found {
+			continue
+		}
+		key = strings.Trim(strings.TrimSpace(key), "\"")
+		value = strings.TrimSpace(value)
+		value = strings.Trim(strings.TrimSuffix(value, ","), "\"")
+		switch dependencyField(key) {
+		case dependencyFieldVersion:
+			dependency.Version = value
+		case dependencyFieldOrigin:
+			dependency.Origin = value
+		}
+	}
+	if name == "" {
+		return "", packageDependency{}, false
+	}
+	return name, dependency, true
 }
 
 func parseDependencyBlock(
