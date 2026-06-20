@@ -250,80 +250,13 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	pkgName := pluginName + "-" + pkgVersion
 	logf("creating plugin package " + pkgName)
 
-	staging := filepath.Join(workDir, "plugin-staging")
-	if err := os.RemoveAll(staging); err != nil {
-		slog.Error("clean staging failed", "err", err, "path", staging)
-		return fmt.Errorf("remove %s: %w", staging, err)
-	}
-	if err := os.MkdirAll(staging, 0o755); err != nil {
-		slog.Error("create staging failed", "err", err, "path", staging)
-		return fmt.Errorf("mkdir %s: %w", staging, err)
-	}
-
 	revStr := strconv.Itoa(revision)
 	makeVars := []string{
-		"DESTDIR=" + staging,
-		"WRKSRC=" + staging,
 		"PLUGIN_VERSION=" + cfVersion,
 		"PLUGIN_REVISION=" + revStr,
 	}
-	if err := runMake(repoDir, "install", makeVars); err != nil {
-		return fmt.Errorf("make install: %w", err)
-	}
-
-	configdBin := filepath.Join(repoDir, "dist", "cloudflared-configd")
-	binDst := filepath.Join(staging, "usr", "local", "bin", "cloudflared-configd")
-	if err := copyFile(configdBin, binDst, 0o755); err != nil {
-		return fmt.Errorf("copy cloudflared-configd: %w", err)
-	}
-
-	if err := runMake(repoDir, "metadata", makeVars); err != nil {
-		return fmt.Errorf("make metadata: %w", err)
-	}
-
-	plistPath := filepath.Join(staging, "plist")
-	extraPlist := []string{
-		"/usr/local/bin/cloudflared-configd",
-		"@dir /var/log/cloudflared",
-		"@dir /usr/local/etc/cloudflared",
-	}
-	if err := appendPlistLines(plistPath, extraPlist); err != nil {
-		return err
-	}
-
-	manifestUCL, err := os.ReadFile(filepath.Join(staging, "+MANIFEST"))
-	if err != nil {
-		slog.Error("read plugin manifest failed", "err", err)
-		return fmt.Errorf("read +MANIFEST: %w", err)
-	}
-	parsedManifest, err := parseUCLManifest(string(manifestUCL))
-	if err != nil {
-		return fmt.Errorf("parse +MANIFEST: %w", err)
-	}
-	if err := setManifestDependency(
-		parsedManifest,
-		"cloudflared",
-		packageDependency{Version: cfVersion, Origin: cloudflaredPackageOrigin},
-	); err != nil {
-		return fmt.Errorf("set cloudflared dependency: %w", err)
-	}
-
-	desc, err := os.ReadFile(filepath.Join(staging, "+DESC"))
-	if err != nil {
-		slog.Error("read plugin desc failed", "err", err)
-		return fmt.Errorf("read +DESC: %w", err)
-	}
-
-	scripts := map[string]string{}
-	for _, s := range []struct{ file, key string }{
-		{"+POST_INSTALL", "post-install"},
-		{"+POST_DEINSTALL", "post-deinstall"},
-	} {
-		data, err := os.ReadFile(filepath.Join(staging, s.file))
-		if err != nil {
-			return fmt.Errorf("read %s: %w", s.file, err)
-		}
-		scripts[s.key] = string(data)
+	if err := runMake(repoDir, "opnsense-package", makeVars); err != nil {
+		return fmt.Errorf("make opnsense-package: %w", err)
 	}
 
 	outDir := filepath.Join(pkgRepoDir, "All")
@@ -332,19 +265,21 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 		return fmt.Errorf("mkdir %s: %w", outDir, err)
 	}
 
-	pkgFile := filepath.Join(outDir, pkgName+".pkg")
-	if err := createPkgArchive(
-		pkgFile, staging, plistPath,
-		parsedManifest, string(desc), scripts,
-	); err != nil {
-		return fmt.Errorf("create plugin package: %w", err)
+	srcPkg, dstPkg := pluginPackagePaths(repoDir, outDir, pkgName)
+	if err := copyFile(srcPkg, dstPkg, 0o644); err != nil {
+		return fmt.Errorf("copy plugin package: %w", err)
 	}
 
-	if _, err := os.Stat(pkgFile); err != nil {
-		return fmt.Errorf("plugin package not found: %s", pkgFile)
+	if _, err := os.Stat(dstPkg); err != nil {
+		return fmt.Errorf("plugin package not found: %s", dstPkg)
 	}
-	logf("plugin package: " + pkgFile)
+	logf("plugin package: " + dstPkg)
 	return nil
+}
+
+func pluginPackagePaths(repoDir, outDir, pkgName string) (string, string) {
+	return filepath.Join(repoDir, "work", "pkg", pkgName+".pkg"),
+		filepath.Join(outDir, pkgName+".pkg")
 }
 
 func runMake(repoDir, target string, vars []string) error {
@@ -362,22 +297,6 @@ func packageMakeCommand() string {
 		return "bmake"
 	}
 	return "make"
-}
-
-func appendPlistLines(path string, lines []string) error {
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		slog.Error("open plist for append failed", "err", err, "path", path)
-		return fmt.Errorf("open %s: %w", path, err)
-	}
-	defer f.Close()
-	for _, line := range lines {
-		if _, err := fmt.Fprintf(f, "%s\n", line); err != nil {
-			slog.Error("append plist line failed", "err", err, "path", path)
-			return fmt.Errorf("append to %s: %w", path, err)
-		}
-	}
-	return nil
 }
 
 // ---- pkg archive builder ---------------------------------------------------

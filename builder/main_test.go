@@ -82,48 +82,15 @@ func Test_filterLines(t *testing.T) {
 	})
 }
 
-func Test_setManifestDependency(t *testing.T) {
+func Test_pluginPackagePaths(t *testing.T) {
 	t.Parallel()
 
-	manifest := strings.Join([]string{
-		"name: os-cloudflared",
-		"version: \"2026.1.1_999\"",
-		"origin: opnsense/os-cloudflared",
-		"prefix: /usr/local",
-		"",
-	}, "\n")
-
-	parsed, err := parseUCLManifest(manifest)
-	if err != nil {
-		t.Fatalf("parseUCLManifest: %v", err)
+	src, dst := pluginPackagePaths("/repo", "/out", "os-cloudflared-2026.6.0_1")
+	if src != "/repo/work/pkg/os-cloudflared-2026.6.0_1.pkg" {
+		t.Fatalf("src = %q", src)
 	}
-	if err := setManifestDependency(
-		parsed,
-		"cloudflared",
-		packageDependency{Version: "2026.1.1", Origin: cloudflaredPackageOrigin},
-	); err != nil {
-		t.Fatalf("setManifestDependency: %v", err)
-	}
-
-	rawDeps, ok := parsed["deps"]
-	if !ok {
-		t.Fatal("missing deps in parsed manifest")
-	}
-
-	var deps map[string]packageDependency
-	if err := json.Unmarshal(rawDeps, &deps); err != nil {
-		t.Fatalf("unmarshal deps: %v", err)
-	}
-
-	dependency, ok := deps["cloudflared"]
-	if !ok {
-		t.Fatalf("deps = %v, want cloudflared", deps)
-	}
-	if dependency.Version != "2026.1.1" {
-		t.Fatalf("cloudflared version = %q, want 2026.1.1", dependency.Version)
-	}
-	if dependency.Origin != "net/cloudflared" {
-		t.Fatalf("cloudflared origin = %q, want net/cloudflared", dependency.Origin)
+	if dst != "/out/os-cloudflared-2026.6.0_1.pkg" {
+		t.Fatalf("dst = %q", dst)
 	}
 }
 
@@ -148,7 +115,10 @@ func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 		t.Fatal("missing deps in parsed manifest")
 	}
 
-	var deps map[string]packageDependency
+	var deps map[string]struct {
+		Version string `json:"version"`
+		Origin  string `json:"origin"`
+	}
 	if err := json.Unmarshal(rawDeps, &deps); err != nil {
 		t.Fatalf("unmarshal deps: %v", err)
 	}
@@ -162,38 +132,6 @@ func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 	}
 	if dependency.Origin != cloudflaredPackageOrigin {
 		t.Fatalf("cloudflared origin = %q, want %s", dependency.Origin, cloudflaredPackageOrigin)
-	}
-}
-
-func Test_setManifestDependencyReplacesNullDeps(t *testing.T) {
-	t.Parallel()
-
-	manifest := map[string]json.RawMessage{
-		"name": json.RawMessage(`"os-cloudflared"`),
-		"deps": json.RawMessage(`null`),
-	}
-
-	if err := setManifestDependency(
-		manifest,
-		"cloudflared",
-		packageDependency{Version: "2026.6.1", Origin: cloudflaredPackageOrigin},
-	); err != nil {
-		t.Fatalf("setManifestDependency: %v", err)
-	}
-
-	var deps map[string]packageDependency
-	if err := json.Unmarshal(manifest["deps"], &deps); err != nil {
-		t.Fatalf("unmarshal deps: %v", err)
-	}
-	if deps == nil {
-		t.Fatal("deps is nil after setting dependency")
-	}
-	dependency, ok := deps["cloudflared"]
-	if !ok {
-		t.Fatalf("deps = %v, want cloudflared", deps)
-	}
-	if dependency.Version != "2026.6.1" {
-		t.Fatalf("cloudflared version = %q, want 2026.6.1", dependency.Version)
 	}
 }
 

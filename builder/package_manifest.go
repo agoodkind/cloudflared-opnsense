@@ -11,11 +11,6 @@ import (
 
 const cloudflaredPackageOrigin = "net/cloudflared"
 
-type packageDependency struct {
-	Version string `json:"version"`
-	Origin  string `json:"origin"`
-}
-
 func init() {
 	ucl.Ucldebug = false
 	ucl.UclExportKeyOrder = false
@@ -42,31 +37,4 @@ func parseUCLManifest(manifestUCL string) (map[string]json.RawMessage, error) {
 		return nil, fmt.Errorf("unmarshal manifest json: %w", err)
 	}
 	return manifest, nil
-}
-
-func setManifestDependency(
-	manifest map[string]json.RawMessage,
-	name string,
-	dependency packageDependency,
-) error {
-	deps := map[string]packageDependency{}
-	if rawDeps, ok := manifest["deps"]; ok && len(rawDeps) > 0 {
-		if err := json.Unmarshal(rawDeps, &deps); err != nil {
-			slog.Error("decode manifest deps failed", "err", err)
-			return fmt.Errorf("decode deps: %w", err)
-		}
-		if deps == nil {
-			deps = map[string]packageDependency{}
-		}
-	}
-
-	deps[name] = dependency
-
-	encodedDeps, err := json.Marshal(deps)
-	if err != nil {
-		slog.Error("encode manifest deps failed", "err", err)
-		return fmt.Errorf("encode deps: %w", err)
-	}
-	manifest["deps"] = encodedDeps
-	return nil
 }
