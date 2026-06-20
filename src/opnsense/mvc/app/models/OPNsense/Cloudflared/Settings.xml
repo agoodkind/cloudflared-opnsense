@@ -1,7 +1,7 @@
 <model>
     <mount>//OPNsense/cloudflared</mount>
     <description>Cloudflared tunnel configuration</description>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <items>
         <general>
             <enabled type="BooleanField">
@@ -26,6 +26,19 @@
             <tunnel_name type="TextField">
                 <Required>N</Required>
             </tunnel_name>
+            <account_tag type="TextField">
+                <Required>N</Required>
+            </account_tag>
+            <tunnel_id type="TextField">
+                <Required>N</Required>
+                <mask>/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/</mask>
+                <ValidationMessage>
+                    Please enter a valid Cloudflare tunnel UUID
+                </ValidationMessage>
+            </tunnel_id>
+            <tunnel_secret type="TextField">
+                <Required>N</Required>
+            </tunnel_secret>
             <post_quantum type="BooleanField">
                 <default>1</default>
                 <Required>N</Required>

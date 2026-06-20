@@ -11,19 +11,48 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
+	"strings"
 
 	"github.com/agoodkind/cloudflared-opnsense/internal/opnsense"
 	"github.com/agoodkind/cloudflared-opnsense/internal/rcconf"
 )
 
 const (
-	configDir  = "/usr/local/etc/cloudflared"
-	tokenFile  = configDir + "/token"
-	configFile = configDir + "/config.yml"
-	rcService  = "cloudflared"
+	defaultConfigDir = "/usr/local/etc/cloudflared"
+	rcService        = "cloudflared"
+)
+
+type runtimePaths struct {
+	configDir       string
+	tokenFile       string
+	configFile      string
+	credentialsFile string
+}
+
+type rcConfWriter func(service string, vars map[string]string) error
+
+type serviceManager func(enabled bool) error
+
+type tunnelCredentials struct {
+	AccountTag   string `json:"AccountTag"`
+	TunnelSecret string `json:"TunnelSecret"`
+	TunnelID     string `json:"TunnelID"`
+}
+
+var defaultRuntimePaths = runtimePaths{
+	configDir:       defaultConfigDir,
+	tokenFile:       defaultConfigDir + "/token",
+	configFile:      defaultConfigDir + "/config.yml",
+	credentialsFile: defaultConfigDir + "/credentials.json",
+}
+
+var uuidPattern = regexp.MustCompile(
+	`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`,
 )
 
 func main() {
@@ -66,8 +95,21 @@ func cmdReconfigure() error {
 		return fmt.Errorf("read settings: %w", err)
 	}
 
-	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return fmt.Errorf("mkdir %s: %w", configDir, err)
+	return applySettings(s, defaultRuntimePaths, rcconf.Write, manageService)
+}
+
+func applySettings(
+	s *opnsense.Settings,
+	paths runtimePaths,
+	writeRC rcConfWriter,
+	manage serviceManager,
+) error {
+	if err := validateEnabledSettings(s); err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(paths.configDir, 0700); err != nil {
+		return fmt.Errorf("mkdir %s: %w", paths.configDir, err)
 	}
 
 	enableVal := "NO"
@@ -94,11 +136,11 @@ func cmdReconfigure() error {
 		proto = s.Protocol
 	}
 
-	if err := rcconf.Write(rcService, map[string]string{
+	if err := writeRC(rcService, map[string]string{
 		"enable":          enableVal,
 		"mode":            s.Mode,
-		"token_file":      tokenFile,
-		"config":          configFile,
+		"token_file":      paths.tokenFile,
+		"config":          paths.configFile,
 		"loglevel":        s.LogLevel,
 		"post_quantum":    pqVal,
 		"edge_ip_version": edgeIP,
@@ -109,34 +151,46 @@ func cmdReconfigure() error {
 
 	switch s.Mode {
 	case "token":
-		if err := writeSecret(tokenFile, s.Token); err != nil {
+		if err := writeSecret(paths.tokenFile, s.Token); err != nil {
 			return fmt.Errorf("write token: %w", err)
 		}
 
 	case "config":
-		yaml, err := renderConfigYAML(s)
+		if !hasTunnelCredentials(s) {
+			break
+		}
+
+		credentials, err := renderCredentialsJSON(s)
+		if err != nil {
+			return fmt.Errorf("render credentials.json: %w", err)
+		}
+		if err := writeSecret(paths.credentialsFile, credentials); err != nil {
+			return fmt.Errorf("write credentials.json: %w", err)
+		}
+
+		yaml, err := renderConfigYAML(s, paths.credentialsFile)
 		if err != nil {
 			return fmt.Errorf("render config.yml: %w", err)
 		}
-		if err := writeSecret(configFile, yaml); err != nil {
+		if err := writeSecret(paths.configFile, yaml); err != nil {
 			return fmt.Errorf("write config.yml: %w", err)
 		}
 	}
 
-	return manageService(s.Enabled)
+	return manage(s.Enabled)
 }
 
 // renderConfigYAML produces a minimal cloudflared config.yml for "config" mode.
 // No external YAML library is used; cloudflared config.yml is simple enough
 // that hand-rolled output is reliable and keeps the binary dependency-free.
-func renderConfigYAML(s *opnsense.Settings) (string, error) {
-	tunnel := s.TunnelName
-	if tunnel == "" {
-		tunnel = "opnsense-tunnel"
+func renderConfigYAML(s *opnsense.Settings, credentialsFile string) (string, error) {
+	tunnelID := strings.TrimSpace(s.TunnelID)
+	if tunnelID == "" {
+		return "", fmt.Errorf("tunnel_id is required in Config File mode")
 	}
 
-	out := fmt.Sprintf("tunnel: %s\ncredentials-file: %s/cert.pem\n\ningress:\n",
-		tunnel, configDir)
+	out := fmt.Sprintf("tunnel: %s\ncredentials-file: %s\n\ningress:\n",
+		tunnelID, credentialsFile)
 
 	for _, t := range s.Tunnels {
 		if !t.Enabled || t.Hostname == "" || t.URL == "" {
@@ -154,6 +208,59 @@ func renderConfigYAML(s *opnsense.Settings) (string, error) {
 
 	out += "  - service: http_status:404\n"
 	return out, nil
+}
+
+func renderCredentialsJSON(s *opnsense.Settings) (string, error) {
+	if err := validateTunnelCredentials(s); err != nil {
+		return "", err
+	}
+
+	credentials := tunnelCredentials{
+		AccountTag:   strings.TrimSpace(s.AccountTag),
+		TunnelSecret: strings.TrimSpace(s.TunnelSecret),
+		TunnelID:     strings.TrimSpace(s.TunnelID),
+	}
+	data, err := json.Marshal(credentials)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func validateEnabledSettings(s *opnsense.Settings) error {
+	if !s.Enabled {
+		return nil
+	}
+
+	if s.Mode == "token" && strings.TrimSpace(s.Token) == "" {
+		return fmt.Errorf("token is required in Token mode")
+	}
+	if s.Mode == "config" {
+		return validateTunnelCredentials(s)
+	}
+	return nil
+}
+
+func hasTunnelCredentials(s *opnsense.Settings) bool {
+	return strings.TrimSpace(s.AccountTag) != "" &&
+		strings.TrimSpace(s.TunnelID) != "" &&
+		strings.TrimSpace(s.TunnelSecret) != ""
+}
+
+func validateTunnelCredentials(s *opnsense.Settings) error {
+	if strings.TrimSpace(s.AccountTag) == "" {
+		return fmt.Errorf("account_tag is required in Config File mode")
+	}
+	if strings.TrimSpace(s.TunnelID) == "" {
+		return fmt.Errorf("tunnel_id is required in Config File mode")
+	}
+	if !uuidPattern.MatchString(strings.TrimSpace(s.TunnelID)) {
+		return fmt.Errorf("tunnel_id must be a UUID in Config File mode")
+	}
+	if strings.TrimSpace(s.TunnelSecret) == "" {
+		return fmt.Errorf("tunnel_secret is required in Config File mode")
+	}
+	return nil
 }
 
 func writeSecret(path, content string) error {

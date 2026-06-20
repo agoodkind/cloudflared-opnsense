@@ -292,6 +292,10 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 		slog.Error("read plugin manifest failed", "err", err)
 		return fmt.Errorf("read +MANIFEST: %w", err)
 	}
+	pluginManifestUCL := pluginManifestWithCloudflaredDependency(
+		string(manifestUCL),
+		cfVersion,
+	)
 
 	desc, err := os.ReadFile(filepath.Join(staging, "+DESC"))
 	if err != nil {
@@ -320,7 +324,7 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	pkgFile := filepath.Join(outDir, pkgName+".pkg")
 	if err := createPkgArchive(
 		pkgFile, staging, plistPath,
-		string(manifestUCL), string(desc), scripts,
+		pluginManifestUCL, string(desc), scripts,
 	); err != nil {
 		return fmt.Errorf("create plugin package: %w", err)
 	}
@@ -339,7 +343,14 @@ func runMake(repoDir, target string, vars []string) error {
 	// make invocation cannot be reached by unvalidated taint. repoDir was the
 	// working directory via -C, so cmd.Dir stays empty here. The error is
 	// returned bare because runCmd is this module's own helper.
-	return runCmd("", "make", args...)
+	return runCmd("", packageMakeCommand(), args...)
+}
+
+func packageMakeCommand() string {
+	if _, err := exec.LookPath("bmake"); err == nil {
+		return "bmake"
+	}
+	return "make"
 }
 
 func appendPlistLines(path string, lines []string) error {
@@ -437,6 +448,15 @@ func parseUCLManifest(ucl string) map[string]json.RawMessage {
 			annotations, nextLineIndex, ok := parseAnnotationsBlock(lines, lineIndex)
 			if ok {
 				m["annotations"] = jsonRawFromStringMap(annotations)
+				lineIndex = nextLineIndex
+				continue
+			}
+		}
+
+		if strings.HasPrefix(line, "deps") {
+			deps, nextLineIndex, ok := parseDepsBlock(lines, lineIndex)
+			if ok {
+				m["deps"] = jsonRawFromPackageDependencyMap(deps)
 				lineIndex = nextLineIndex
 				continue
 			}

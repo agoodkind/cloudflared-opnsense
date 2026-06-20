@@ -63,6 +63,9 @@
             $('#general\\.enabled').prop('checked', general.enabled === '1');
             $('#general\\.token').val(general.token || '');
             $('#general\\.tunnel_name').val(general.tunnel_name || '');
+            $('#general\\.account_tag').val(general.account_tag || '');
+            $('#general\\.tunnel_id').val(general.tunnel_id || '');
+            $('#general\\.tunnel_secret').val(general.tunnel_secret || '');
             $('#general\\.post_quantum').prop('checked', general.post_quantum === '1');
 
             var modeValue = selectedCloudflaredOptionValue(general.mode);
@@ -142,11 +145,18 @@
         function updateModeUI() {
             var mode = $('#general\\.mode').val();
             var isTokenMode = mode !== 'config';
+            var isConfigMode = !isTokenMode;
 
             $('#row_general\\.token').toggle(isTokenMode);
+            $('#row_general\\.tunnel_name').toggle(isConfigMode);
+            $('#row_general\\.account_tag').toggle(isConfigMode);
+            $('#row_general\\.tunnel_id').toggle(isConfigMode);
+            $('#row_general\\.tunnel_secret').toggle(isConfigMode);
+            $('#cloudflaredTokenHelp').toggle(isTokenMode);
+            $('#cloudflaredConfigHelp').toggle(isConfigMode);
             $('#ingressModeHint').toggle(isTokenMode);
-            $('#ingressRulesPanel').toggle(!isTokenMode);
-            $('#ingress_tab_nav').toggle(!isTokenMode);
+            $('#ingressRulesPanel').toggle(isConfigMode);
+            $('#ingress_tab_nav').toggle(isConfigMode);
 
             if (isTokenMode && window.location.hash === '#ingress') {
                 $('a[href="#settings"]').tab('show');
@@ -290,6 +300,28 @@
 <div class="tab-content content-box">
     <div id="settings" class="tab-pane fade in active">
         {{ partial("layout_partials/base_form", ['fields': generalForm, 'id': 'frm_settings']) }}
+
+        <div id="cloudflaredTokenHelp" class="alert alert-info" role="alert" style="margin: 15px; display: none;">
+            <strong>{{ lang._('Tunnel Token') }}</strong>
+            {{ lang._('Get the token from an existing remotely-managed Cloudflare Tunnel.') }}
+            {{ lang._('Cloudflare documents the dashboard and API steps in') }}
+            <a href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/remote-tunnel-permissions/" target="_blank" rel="noopener noreferrer">
+                {{ lang._('Tunnel permissions') }}
+            </a>.
+        </div>
+
+        <div id="cloudflaredConfigHelp" class="alert alert-info" role="alert" style="margin: 15px; display: none;">
+            <strong>{{ lang._('AccountTag, Tunnel ID, Tunnel Secret') }}</strong>
+            {{ lang._('Create a locally-managed tunnel, then copy AccountTag, TunnelID, and TunnelSecret from its credentials JSON.') }}
+            {{ lang._('Cloudflare documents local tunnel creation in') }}
+            <a href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/local-management/create-local-tunnel/" target="_blank" rel="noopener noreferrer">
+                {{ lang._('Create a locally-managed tunnel') }}
+            </a>
+            {{ lang._('and shows the API credentials_file object in') }}
+            <a href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel-api/" target="_blank" rel="noopener noreferrer">
+                {{ lang._('Create a tunnel with the API') }}
+            </a>.
+        </div>
     </div>
 
     <div id="ingress" class="tab-pane fade in">

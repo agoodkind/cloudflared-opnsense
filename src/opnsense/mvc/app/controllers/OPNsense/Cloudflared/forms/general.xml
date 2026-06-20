@@ -26,8 +26,9 @@
         <label>Tunnel Token</label>
         <type>password</type>
         <help>
-            Paste the tunnel token from the Cloudflare Zero Trust dashboard.
-            Required in Token mode.
+            Paste the tunnel token from an existing remotely-managed tunnel.
+            Required in Token mode. See Cloudflare Tunnel permissions:
+            https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/remote-tunnel-permissions/
         </help>
     </field>
     <field>
@@ -35,8 +36,38 @@
         <label>Tunnel Name</label>
         <type>text</type>
         <help>
-            Name for the tunnel. In Config File mode, this name is written
-            into the generated configuration.
+            Optional local label for the tunnel. Config File mode uses the
+            Tunnel ID below as the runtime tunnel identity.
+        </help>
+    </field>
+    <field>
+        <id>general.account_tag</id>
+        <label>AccountTag</label>
+        <type>text</type>
+        <help>
+            Paste the AccountTag value from the tunnel credentials JSON
+            created by cloudflared tunnel create. Cloudflare also returns
+            these values in the API response credentials_file object. Required
+            in Config File mode. See Cloudflare locally-managed tunnel setup:
+            https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/local-management/create-local-tunnel/
+        </help>
+    </field>
+    <field>
+        <id>general.tunnel_id</id>
+        <label>Tunnel ID</label>
+        <type>text</type>
+        <help>
+            Paste the TunnelID value from the same tunnel credentials JSON.
+            Config File mode writes this UUID into config.yml.
+        </help>
+    </field>
+    <field>
+        <id>general.tunnel_secret</id>
+        <label>Tunnel Secret</label>
+        <type>password</type>
+        <help>
+            Paste the TunnelSecret value from the same tunnel credentials JSON.
+            Required in Config File mode.
         </help>
     </field>
     <field>
