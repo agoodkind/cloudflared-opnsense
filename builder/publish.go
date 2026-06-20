@@ -64,12 +64,13 @@ func publishRepositoryMetadata(repoDir string) error {
 		return fmt.Errorf("mkdir %s: %w", pkgDst, err)
 	}
 
-	for _, f := range []string{"meta.conf", "meta", "packagesite.yaml", "packagesite.pkg", "data.pkg"} {
-		src := filepath.Join(pkgRepoDir, f)
-		if _, err := os.Stat(src); err != nil {
-			continue
-		}
-		if err := copyFile(src, filepath.Join(pkgDst, f), 0o644); err != nil {
+	metadataPaths, err := repoMetadataPaths(pkgRepoDir)
+	if err != nil {
+		return err
+	}
+
+	for _, src := range metadataPaths {
+		if err := copyFile(src, filepath.Join(pkgDst, filepath.Base(src)), 0o644); err != nil {
 			return err
 		}
 	}
@@ -171,106 +172,6 @@ func latestGitHubVersion() (string, error) {
 	return rel.TagName, nil
 }
 
-// ---- archive helpers -------------------------------------------------------
-
-// maxExtractBytes caps a single extracted metadata member so a crafted or
-// corrupt archive cannot drive unbounded disk use. Repository metadata files
-// are well under this.
-const maxExtractBytes = 64 << 20
-
-// extractZstdTar extracts a single named file from a zstd-compressed tar.
-func extractZstdTar(archivePath, targetName, outputPath string) error {
-	f, err := os.Open(archivePath)
-	if err != nil {
-		slog.Error("open archive failed", "err", err, "path", archivePath)
-		return fmt.Errorf("open %s: %w", archivePath, err)
-	}
-	defer f.Close()
-
-	zr, err := zstd.NewReader(f)
-	if err != nil {
-		slog.Error("open zstd reader failed", "err", err, "path", archivePath)
-		return fmt.Errorf("zstd reader %s: %w", archivePath, err)
-	}
-	defer zr.Close()
-
-	tr := tar.NewReader(zr)
-	for {
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			slog.Error("read tar entry failed", "err", err, "path", archivePath)
-			return fmt.Errorf("tar read %s: %w", archivePath, err)
-		}
-		if hdr.Name == targetName || filepath.Base(hdr.Name) == targetName {
-			out, err := os.Create(outputPath)
-			if err != nil {
-				slog.Error("create output failed", "err", err, "path", outputPath)
-				return fmt.Errorf("create %s: %w", outputPath, err)
-			}
-			_, copyErr := io.Copy(out, io.LimitReader(tr, maxExtractBytes))
-			out.Close()
-			if copyErr != nil {
-				slog.Error("copy archive member failed", "err", copyErr, "path", outputPath)
-				return fmt.Errorf("copy %s: %w", outputPath, copyErr)
-			}
-			return nil
-		}
-	}
-	return fmt.Errorf("file %q not found in archive %s", targetName, archivePath)
-}
-
-// createZstdTar creates a zstd-compressed tar containing a single file.
-func createZstdTar(archivePath, filePath, nameInArchive string) error {
-	out, err := os.Create(archivePath)
-	if err != nil {
-		slog.Error("create archive failed", "err", err, "path", archivePath)
-		return fmt.Errorf("create %s: %w", archivePath, err)
-	}
-	defer out.Close()
-
-	zw, err := zstd.NewWriter(out)
-	if err != nil {
-		slog.Error("open zstd writer failed", "err", err, "path", archivePath)
-		return fmt.Errorf("zstd writer %s: %w", archivePath, err)
-	}
-	defer zw.Close()
-
-	tw := tar.NewWriter(zw)
-	defer tw.Close()
-
-	in, err := os.Open(filePath)
-	if err != nil {
-		slog.Error("open source failed", "err", err, "path", filePath)
-		return fmt.Errorf("open %s: %w", filePath, err)
-	}
-	defer in.Close()
-
-	info, err := in.Stat()
-	if err != nil {
-		slog.Error("stat source failed", "err", err, "path", filePath)
-		return fmt.Errorf("stat %s: %w", filePath, err)
-	}
-
-	hdr := &tar.Header{
-		Name:    nameInArchive,
-		Size:    info.Size(),
-		Mode:    0o644,
-		ModTime: info.ModTime(),
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		slog.Error("write tar header failed", "err", err, "name", nameInArchive)
-		return fmt.Errorf("write tar header: %w", err)
-	}
-	if _, err := io.Copy(tw, in); err != nil {
-		slog.Error("copy into archive failed", "err", err, "path", filePath)
-		return fmt.Errorf("copy %s: %w", filePath, err)
-	}
-	return nil
-}
-
 // ---- fs helpers ------------------------------------------------------------
 
 func copyFile(src, dst string, mode os.FileMode) error {
@@ -298,17 +199,6 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return fmt.Errorf("copy %s to %s: %w", src, dst, err)
 	}
 	return nil
-}
-
-func filterLines(s string, keep func(string) bool) string {
-	var out strings.Builder
-	for l := range strings.SplitSeq(s, "\n") {
-		if keep(l) {
-			out.WriteString(l)
-			out.WriteByte('\n')
-		}
-	}
-	return out.String()
 }
 
 // ---- exec helper -----------------------------------------------------------

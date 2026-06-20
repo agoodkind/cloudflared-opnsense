@@ -58,23 +58,38 @@ func TestR2UploadsMapsPackagesAndMetadata(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(metadataDir, "meta.conf"), []byte("meta"), 0o644); err != nil {
 		t.Fatalf("write meta.conf: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(metadataDir, "packagesite.yaml"), []byte("site"), 0o644); err != nil {
-		t.Fatalf("write packagesite.yaml: %v", err)
+	if err := os.WriteFile(filepath.Join(metadataDir, "meta.pkg"), []byte("meta-pkg"), 0o644); err != nil {
+		t.Fatalf("write meta.pkg: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(metadataDir, "meta.txz"), []byte("meta-txz"), 0o644); err != nil {
+		t.Fatalf("write meta.txz: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(metadataDir, "packagesite.pkg"), []byte("site-pkg"), 0o644); err != nil {
+		t.Fatalf("write packagesite.pkg: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(metadataDir, "packagesite.txz"), []byte("site-txz"), 0o644); err != nil {
+		t.Fatalf("write packagesite.txz: %v", err)
 	}
 
-	uploads := r2Uploads(
+	uploads, err := r2Uploads(
 		[]string{
 			filepath.Join(tempDir, "cloudflared-2026.6.0.pkg"),
 			filepath.Join(tempDir, "os-cloudflared-2026.6.0_1.pkg"),
 		},
 		metadataDir,
 	)
+	if err != nil {
+		t.Fatalf("r2Uploads: %v", err)
+	}
 
 	want := []r2Upload{
 		{sourcePath: filepath.Join(tempDir, "cloudflared-2026.6.0.pkg"), objectKey: "All/cloudflared-2026.6.0.pkg"},
 		{sourcePath: filepath.Join(tempDir, "os-cloudflared-2026.6.0_1.pkg"), objectKey: "All/os-cloudflared-2026.6.0_1.pkg"},
 		{sourcePath: filepath.Join(metadataDir, "meta.conf"), objectKey: "meta.conf"},
-		{sourcePath: filepath.Join(metadataDir, "packagesite.yaml"), objectKey: "packagesite.yaml"},
+		{sourcePath: filepath.Join(metadataDir, "meta.pkg"), objectKey: "meta.pkg"},
+		{sourcePath: filepath.Join(metadataDir, "meta.txz"), objectKey: "meta.txz"},
+		{sourcePath: filepath.Join(metadataDir, "packagesite.pkg"), objectKey: "packagesite.pkg"},
+		{sourcePath: filepath.Join(metadataDir, "packagesite.txz"), objectKey: "packagesite.txz"},
 	}
 	if len(uploads) != len(want) {
 		t.Fatalf("len(uploads) = %d, want %d: %#v", len(uploads), len(want), uploads)
