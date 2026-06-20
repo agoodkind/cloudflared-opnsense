@@ -49,12 +49,14 @@ The legacy `cloudflared-opnsense-pkg.goodkind.io` nginx host on `freebsd-dev` is
 
 ### Development machine (macOS or Linux)
 
-- Go 1.21+ (matching `go.mod`)
+- Go 1.26.4+ (matching `go.mod`)
 - For BSD-make targets locally: `brew install bmake` (macOS `/usr/bin/make` is GNU make and does not parse `Mk/plugins.mk`)
 
 ### CI runtime
 
-GitHub Actions provides everything else. No persistent build host is required.
+GitHub Actions provides everything else. The publish job requires `CF_ACCOUNT_ID`
+and `CLOUDFLARE_API_TOKEN` secrets for Cloudflare R2 uploads. No persistent build
+host is required.
 
 ## Building
 
@@ -88,7 +90,7 @@ Stages:
 2. **`test`** (Ubuntu): root-module `go vet` and `go test -race`, cross-compile `cloudflared-configd` for FreeBSD, and cross-compile the builder for FreeBSD.
 3. **`builder`** (reusable go-makefile CI): runs the canonical `builder/` go-makefile quality and build gates through `agoodkind/go-makefile/.github/workflows/_ci.yml@main`.
 4. **`build`** (Ubuntu host with `vmactions/freebsd-vm@v1.4.6` running FreeBSD 14.2): builds `cloudflared-configd` (root module) and `cloudflared-builder` (its module) with `-trimpath -buildvcs=false`, then runs the builder's `build`, `package`, and `repo` subcommands to produce pkg(8) packages.
-5. **`publish`** (Ubuntu, skipped on PRs): runs `cloudflared-builder publish`, which compares each package's normalized `+MANIFEST` content against the latest release for the same upstream version and, only when the binary or plugin package content changed, uploads packages and metadata to R2 and cuts a tagged GitHub release.
+5. **`publish`** (Ubuntu, skipped on PRs): runs `cloudflared-builder publish`, which compares each package's normalized `+MANIFEST` content against the latest release for the same upstream version and, only when the binary or plugin package content changed, uploads packages and metadata to R2 through Cloudflare's Go SDK and cuts a tagged GitHub release.
 
 ### Meaningful content change
 
