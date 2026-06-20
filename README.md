@@ -85,9 +85,10 @@ cd builder && make check
 Stages:
 
 1. **`check`** (Ubuntu): runs `cloudflared-builder plan`, which queries the GitHub API for the latest cloudflared release and derives the next FreeBSD revision from existing release tags. No persistent state.
-2. **`test`** (Ubuntu): root-module `go vet` and `go test -race`, cross-compile `cloudflared-configd` for FreeBSD, the `builder/` go-makefile gate (`make check`), and a FreeBSD cross-compile of the builder.
-3. **`build`** (Ubuntu host with `vmactions/freebsd-vm@v1.4.6` running FreeBSD 14.2): builds `cloudflared-configd` (root module) and `cloudflared-builder` (its module) with `-trimpath -buildvcs=false`, then runs the builder's `build`, `package`, and `repo` subcommands to produce pkg(8) packages.
-4. **`publish`** (Ubuntu, skipped on PRs): runs `cloudflared-builder publish`, which compares each package's normalized `+MANIFEST` content against the latest release for the same upstream version and, only when the binary or plugin package content changed, uploads packages and metadata to R2 and cuts a tagged GitHub release.
+2. **`test`** (Ubuntu): root-module `go vet` and `go test -race`, cross-compile `cloudflared-configd` for FreeBSD, and cross-compile the builder for FreeBSD.
+3. **`builder`** (reusable go-makefile CI): runs the canonical `builder/` go-makefile quality and build gates through `agoodkind/go-makefile/.github/workflows/_ci.yml@main`.
+4. **`build`** (Ubuntu host with `vmactions/freebsd-vm@v1.4.6` running FreeBSD 14.2): builds `cloudflared-configd` (root module) and `cloudflared-builder` (its module) with `-trimpath -buildvcs=false`, then runs the builder's `build`, `package`, and `repo` subcommands to produce pkg(8) packages.
+5. **`publish`** (Ubuntu, skipped on PRs): runs `cloudflared-builder publish`, which compares each package's normalized `+MANIFEST` content against the latest release for the same upstream version and, only when the binary or plugin package content changed, uploads packages and metadata to R2 and cuts a tagged GitHub release.
 
 ### Meaningful content change
 

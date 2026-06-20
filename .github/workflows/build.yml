@@ -52,16 +52,22 @@ jobs:
           GOOS=freebsd GOARCH=amd64 \
             go build -trimpath -buildvcs=false ./cmd/cloudflared-configd
 
-      - name: Builder module gate (go-makefile)
-        run: cd builder && make check
-
       - name: Cross-compile cloudflared-builder for FreeBSD
         run: |
           cd builder && GOOS=freebsd GOARCH=amd64 \
             go build -trimpath -buildvcs=false -o /dev/null .
 
+  builder:
+    uses: agoodkind/go-makefile/.github/workflows/_ci.yml@main
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      go_version_file: builder/go.mod
+      working_directory: builder
+
   build:
-    needs: [check, test]
+    needs: [check, test, builder]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6.0.3
