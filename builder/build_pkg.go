@@ -202,6 +202,10 @@ func createBinaryPackage(cfVersion, repoDir string) error {
 		return fmt.Errorf("read +MANIFEST: %w", err)
 	}
 	rendered := strings.ReplaceAll(string(manifest), "{{version}}", cfVersion)
+	parsedManifest, err := parseUCLManifest(rendered)
+	if err != nil {
+		return fmt.Errorf("parse +MANIFEST: %w", err)
+	}
 
 	desc, err := os.ReadFile(filepath.Join(pkgMeta, "+DESC"))
 	if err != nil {
@@ -225,7 +229,7 @@ func createBinaryPackage(cfVersion, repoDir string) error {
 	pkgFile := filepath.Join(outDir, "cloudflared-"+cfVersion+".pkg")
 	if err := createPkgArchive(
 		pkgFile, staging, plistPath,
-		rendered, string(desc), scripts,
+		parsedManifest, string(desc), scripts,
 	); err != nil {
 		return fmt.Errorf("create binary package: %w", err)
 	}
@@ -292,10 +296,17 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 		slog.Error("read plugin manifest failed", "err", err)
 		return fmt.Errorf("read +MANIFEST: %w", err)
 	}
-	pluginManifestUCL := pluginManifestWithCloudflaredDependency(
-		string(manifestUCL),
-		cfVersion,
-	)
+	parsedManifest, err := parseUCLManifest(string(manifestUCL))
+	if err != nil {
+		return fmt.Errorf("parse +MANIFEST: %w", err)
+	}
+	if err := setManifestDependency(
+		parsedManifest,
+		"cloudflared",
+		packageDependency{Version: cfVersion, Origin: cloudflaredPackageOrigin},
+	); err != nil {
+		return fmt.Errorf("set cloudflared dependency: %w", err)
+	}
 
 	desc, err := os.ReadFile(filepath.Join(staging, "+DESC"))
 	if err != nil {
@@ -324,7 +335,7 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	pkgFile := filepath.Join(outDir, pkgName+".pkg")
 	if err := createPkgArchive(
 		pkgFile, staging, plistPath,
-		pluginManifestUCL, string(desc), scripts,
+		parsedManifest, string(desc), scripts,
 	); err != nil {
 		return fmt.Errorf("create plugin package: %w", err)
 	}
@@ -430,71 +441,6 @@ func sha256File(path string) (string, error) {
 	return "1$" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// parseUCLManifest does a minimal parse of UCL-format +MANIFEST files into a
-// map of pre-encoded JSON values suitable for JSON serialization. It handles
-// the subset of UCL used by OPNsense plugin manifests: simple key/value pairs,
-// single-line arrays, and the generated annotations JSON object. Values are
-// stored as [json.RawMessage] so the manifest map carries no `any`.
-func parseUCLManifest(ucl string) map[string]json.RawMessage {
-	m := make(map[string]json.RawMessage)
-	lines := strings.Split(ucl, "\n")
-	for lineIndex := 0; lineIndex < len(lines); lineIndex++ {
-		line := strings.TrimSpace(lines[lineIndex])
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		if strings.HasPrefix(line, "annotations") {
-			annotations, nextLineIndex, ok := parseAnnotationsBlock(lines, lineIndex)
-			if ok {
-				m["annotations"] = jsonRawFromStringMap(annotations)
-				lineIndex = nextLineIndex
-				continue
-			}
-		}
-
-		if strings.HasPrefix(line, "deps") {
-			deps, nextLineIndex, ok := parseDepsBlock(lines, lineIndex)
-			if ok {
-				m["deps"] = jsonRawFromPackageDependencyMap(deps)
-				lineIndex = nextLineIndex
-				continue
-			}
-		}
-
-		key, val, found := strings.Cut(line, ":")
-		if !found {
-			continue
-		}
-		key = strings.Trim(strings.TrimSpace(key), "\"")
-		val = strings.TrimSpace(val)
-		val = strings.TrimSuffix(val, ",")
-		val = strings.TrimSpace(val)
-		val = strings.Trim(val, "\"")
-
-		if strings.HasPrefix(val, "[") && strings.HasSuffix(val, "]") {
-			m[key] = jsonRawFromStringSlice(parseUCLArray(val))
-		} else {
-			m[key] = jsonRawFromString(val)
-		}
-	}
-	return m
-}
-
-// parseUCLArray splits a single-line UCL array literal such as `[ "net" ]`
-// into its trimmed, unquoted elements.
-func parseUCLArray(val string) []string {
-	inner := val[1 : len(val)-1]
-	var arr []string
-	for item := range strings.SplitSeq(inner, ",") {
-		item = strings.Trim(strings.TrimSpace(item), "\"")
-		if item != "" {
-			arr = append(arr, item)
-		}
-	}
-	return arr
-}
-
 // jsonRawFromString encodes a string as a [json.RawMessage]. Marshaling a string
 // cannot fail; an impossible failure falls back to a JSON null so the manifest
 // stays well-formed.
@@ -502,16 +448,6 @@ func jsonRawFromString(s string) json.RawMessage {
 	b, err := json.Marshal(s)
 	if err != nil {
 		slog.Error("encode string value failed", "err", err)
-		return json.RawMessage("null")
-	}
-	return b
-}
-
-// jsonRawFromStringSlice encodes a []string as a [json.RawMessage].
-func jsonRawFromStringSlice(s []string) json.RawMessage {
-	b, err := json.Marshal(s)
-	if err != nil {
-		slog.Error("encode array value failed", "err", err)
 		return json.RawMessage("null")
 	}
 	return b
@@ -535,36 +471,6 @@ func jsonRawFromInt64(n int64) json.RawMessage {
 		return json.RawMessage("null")
 	}
 	return b
-}
-
-func parseAnnotationsBlock(lines []string, startLineIndex int) (map[string]string, int, bool) {
-	line := strings.TrimSpace(lines[startLineIndex])
-	bodyStart := strings.TrimSpace(strings.TrimPrefix(line, "annotations"))
-	if !strings.HasPrefix(bodyStart, "{") {
-		return nil, startLineIndex, false
-	}
-
-	var body strings.Builder
-	braceDepth := 0
-	for lineIndex := startLineIndex; lineIndex < len(lines); lineIndex++ {
-		blockLine := strings.TrimSpace(lines[lineIndex])
-		if lineIndex == startLineIndex {
-			blockLine = bodyStart
-		}
-		body.WriteString(blockLine)
-		body.WriteString("\n")
-		braceDepth += strings.Count(blockLine, "{")
-		braceDepth -= strings.Count(blockLine, "}")
-		if braceDepth == 0 {
-			annotations := make(map[string]string)
-			if err := json.Unmarshal([]byte(body.String()), &annotations); err != nil {
-				return nil, startLineIndex, false
-			}
-			return annotations, lineIndex, true
-		}
-	}
-
-	return nil, startLineIndex, false
 }
 
 func plistAbsPath(prefix, entry string) string {
@@ -753,7 +659,7 @@ func createPkgArchive(
 	outputPath string,
 	stagingDir string,
 	plistPath string,
-	manifestUCL string,
+	parsed map[string]json.RawMessage,
 	desc string,
 	scripts map[string]string,
 ) error {
@@ -762,7 +668,6 @@ func createPkgArchive(
 		return fmt.Errorf("parse plist: %w", err)
 	}
 
-	parsed := parseUCLManifest(manifestUCL)
 	prefix := manifestPrefix(parsed)
 
 	filesMap, flatsize, err := hashStagedFiles(stagingDir, prefix, plistFiles)
