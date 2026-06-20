@@ -165,6 +165,38 @@ func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 	}
 }
 
+func Test_setManifestDependencyReplacesNullDeps(t *testing.T) {
+	t.Parallel()
+
+	manifest := map[string]json.RawMessage{
+		"name": json.RawMessage(`"os-cloudflared"`),
+		"deps": json.RawMessage(`null`),
+	}
+
+	if err := setManifestDependency(
+		manifest,
+		"cloudflared",
+		packageDependency{Version: "2026.6.1", Origin: cloudflaredPackageOrigin},
+	); err != nil {
+		t.Fatalf("setManifestDependency: %v", err)
+	}
+
+	var deps map[string]packageDependency
+	if err := json.Unmarshal(manifest["deps"], &deps); err != nil {
+		t.Fatalf("unmarshal deps: %v", err)
+	}
+	if deps == nil {
+		t.Fatal("deps is nil after setting dependency")
+	}
+	dependency, ok := deps["cloudflared"]
+	if !ok {
+		t.Fatalf("deps = %v, want cloudflared", deps)
+	}
+	if dependency.Version != "2026.6.1" {
+		t.Fatalf("cloudflared version = %q, want 2026.6.1", dependency.Version)
+	}
+}
+
 func Test_parseUCLManifestParsesBinaryTemplate(t *testing.T) {
 	t.Parallel()
 

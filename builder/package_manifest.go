@@ -55,6 +55,9 @@ func setManifestDependency(
 			slog.Error("decode manifest deps failed", "err", err)
 			return fmt.Errorf("decode deps: %w", err)
 		}
+		if deps == nil {
+			deps = map[string]packageDependency{}
+		}
 	}
 
 	deps[name] = dependency
