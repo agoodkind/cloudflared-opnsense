@@ -82,7 +82,7 @@ func Test_filterLines(t *testing.T) {
 	})
 }
 
-func Test_pluginManifestWithCloudflaredDependency(t *testing.T) {
+func Test_setManifestDependency(t *testing.T) {
 	t.Parallel()
 
 	manifest := strings.Join([]string{
@@ -93,9 +93,17 @@ func Test_pluginManifestWithCloudflaredDependency(t *testing.T) {
 		"",
 	}, "\n")
 
-	parsed := parseUCLManifest(
-		pluginManifestWithCloudflaredDependency(manifest, "2026.1.1"),
-	)
+	parsed, err := parseUCLManifest(manifest)
+	if err != nil {
+		t.Fatalf("parseUCLManifest: %v", err)
+	}
+	if err := setManifestDependency(
+		parsed,
+		"cloudflared",
+		packageDependency{Version: "2026.1.1", Origin: cloudflaredPackageOrigin},
+	); err != nil {
+		t.Fatalf("setManifestDependency: %v", err)
+	}
 
 	rawDeps, ok := parsed["deps"]
 	if !ok {
@@ -130,7 +138,10 @@ func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 		"",
 	}, "\n")
 
-	manifest := parseUCLManifest(ucl)
+	manifest, err := parseUCLManifest(ucl)
+	if err != nil {
+		t.Fatalf("parseUCLManifest: %v", err)
+	}
 
 	rawDeps, ok := manifest["deps"]
 	if !ok {
@@ -149,8 +160,72 @@ func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 	if dependency.Version != "2026.6.0" {
 		t.Fatalf("cloudflared version = %q, want 2026.6.0", dependency.Version)
 	}
-	if dependency.Origin != "net/cloudflared" {
-		t.Fatalf("cloudflared origin = %q, want net/cloudflared", dependency.Origin)
+	if dependency.Origin != cloudflaredPackageOrigin {
+		t.Fatalf("cloudflared origin = %q, want %s", dependency.Origin, cloudflaredPackageOrigin)
+	}
+}
+
+func Test_setManifestDependencyReplacesNullDeps(t *testing.T) {
+	t.Parallel()
+
+	manifest := map[string]json.RawMessage{
+		"name": json.RawMessage(`"os-cloudflared"`),
+		"deps": json.RawMessage(`null`),
+	}
+
+	if err := setManifestDependency(
+		manifest,
+		"cloudflared",
+		packageDependency{Version: "2026.6.1", Origin: cloudflaredPackageOrigin},
+	); err != nil {
+		t.Fatalf("setManifestDependency: %v", err)
+	}
+
+	var deps map[string]packageDependency
+	if err := json.Unmarshal(manifest["deps"], &deps); err != nil {
+		t.Fatalf("unmarshal deps: %v", err)
+	}
+	if deps == nil {
+		t.Fatal("deps is nil after setting dependency")
+	}
+	dependency, ok := deps["cloudflared"]
+	if !ok {
+		t.Fatalf("deps = %v, want cloudflared", deps)
+	}
+	if dependency.Version != "2026.6.1" {
+		t.Fatalf("cloudflared version = %q, want 2026.6.1", dependency.Version)
+	}
+}
+
+func Test_parseUCLManifestParsesBinaryTemplate(t *testing.T) {
+	t.Parallel()
+
+	templatePath := filepath.Join("..", "packages", "cloudflared", "+MANIFEST")
+	templateData, err := os.ReadFile(templatePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", templatePath, err)
+	}
+
+	rendered := strings.ReplaceAll(string(templateData), "{{version}}", "2026.6.0")
+	manifest, err := parseUCLManifest(rendered)
+	if err != nil {
+		t.Fatalf("parseUCLManifest: %v", err)
+	}
+
+	var categories []string
+	if err := json.Unmarshal(manifest["categories"], &categories); err != nil {
+		t.Fatalf("categories unmarshal: %v", err)
+	}
+	if len(categories) != 1 || categories[0] != "net" {
+		t.Fatalf("categories = %v", categories)
+	}
+
+	var licenses []string
+	if err := json.Unmarshal(manifest["licenses"], &licenses); err != nil {
+		t.Fatalf("licenses unmarshal: %v", err)
+	}
+	if len(licenses) != 1 || licenses[0] != "Apache-2.0" {
+		t.Fatalf("licenses = %v", licenses)
 	}
 }
 
@@ -198,7 +273,10 @@ annotations {
 }
 `
 
-	manifest := parseUCLManifest(ucl)
+	manifest, err := parseUCLManifest(ucl)
+	if err != nil {
+		t.Fatalf("parseUCLManifest: %v", err)
+	}
 
 	var name string
 	if err := json.Unmarshal(manifest["name"], &name); err != nil {
@@ -267,8 +345,19 @@ func TestCreatePkgArchiveUsesLegacyManifestLayout(t *testing.T) {
 		"",
 	}, "\n")
 	scripts := map[string]string{"post-install": "#!/bin/sh\necho ok\n"}
+	parsedManifest, err := parseUCLManifest(manifest)
+	if err != nil {
+		t.Fatalf("parseUCLManifest: %v", err)
+	}
 
-	if err := createPkgArchive(outputPath, stagingDir, plistPath, manifest, "desc\n", scripts); err != nil {
+	if err := createPkgArchive(
+		outputPath,
+		stagingDir,
+		plistPath,
+		parsedManifest,
+		"desc\n",
+		scripts,
+	); err != nil {
 		t.Fatalf("createPkgArchive: %v", err)
 	}
 

@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/cloudflare/cloudflare-go/v7 v7.6.0
 	github.com/klauspost/compress v1.18.6
+	github.com/nahanni/go-ucl v0.0.0-20161122070711-3788fcf0dad8
 )
 
 require (
