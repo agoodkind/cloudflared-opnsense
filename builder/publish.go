@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -384,10 +383,6 @@ const (
 	maxManifestBytes = 8 << 20
 )
 
-// r2AccountIDPattern confines the environment-supplied Cloudflare account id to
-// an alphabet that is safe to interpolate into a command argument.
-var r2AccountIDPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
-
 // pkgKind selects which version-identity fields a package's manifest sheds
 // before fingerprinting.
 type pkgKind int
@@ -682,43 +677,6 @@ func decidePublish(version string, revision int, repoDir string) (publishDecisio
 		decision.reason = "no_meaningful_change"
 	}
 	return decision, nil
-}
-
-// uploadToR2 mirrors the given package files and the repository metadata to the
-// R2 bucket by invoking the aws CLI, the same way this tool already invokes gh
-// and git. The aws credentials and CF_ACCOUNT_ID come from the environment.
-func uploadToR2(pkgFiles []string, metadataDir string) error {
-	accountID := os.Getenv("CF_ACCOUNT_ID")
-	// Validate before interpolating into a command argument: the account id is
-	// an external (environment) value, and the regexp guard both rejects bad
-	// input and confines it to an injection-safe alphabet.
-	if !r2AccountIDPattern.MatchString(accountID) {
-		invalid := fmt.Errorf("CF_ACCOUNT_ID is missing or malformed: %q", accountID)
-		slog.Error("invalid R2 account id", "err", invalid)
-		return invalid
-	}
-	endpoint := "https://" + accountID + ".r2.cloudflarestorage.com"
-
-	for _, src := range pkgFiles {
-		dst := "s3://" + r2Bucket + "/All/" + filepath.Base(src)
-		if err := runCmd("", "aws", "s3", "cp", src, dst, "--endpoint-url", endpoint); err != nil {
-			return fmt.Errorf("upload %s: %w", src, err)
-		}
-	}
-
-	for _, name := range []string{"meta.conf", "meta", "packagesite.yaml", "packagesite.pkg", "data.pkg"} {
-		src := filepath.Join(metadataDir, name)
-		if _, statErr := os.Stat(src); statErr != nil {
-			continue
-		}
-		dst := "s3://" + r2Bucket + "/" + name
-		if err := runCmd("", "aws", "s3", "cp", src, dst, "--endpoint-url", endpoint); err != nil {
-			return fmt.Errorf("upload %s: %w", name, err)
-		}
-	}
-
-	logf("R2 upload complete")
-	return nil
 }
 
 // runCmdOutput runs a command and captures its stdout, mirroring runCmd but for
