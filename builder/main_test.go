@@ -165,6 +165,38 @@ func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 	}
 }
 
+func Test_parseUCLManifestParsesBinaryTemplate(t *testing.T) {
+	t.Parallel()
+
+	templatePath := filepath.Join("..", "packages", "cloudflared", "+MANIFEST")
+	templateData, err := os.ReadFile(templatePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", templatePath, err)
+	}
+
+	rendered := strings.ReplaceAll(string(templateData), "{{version}}", "2026.6.0")
+	manifest, err := parseUCLManifest(rendered)
+	if err != nil {
+		t.Fatalf("parseUCLManifest: %v", err)
+	}
+
+	var categories []string
+	if err := json.Unmarshal(manifest["categories"], &categories); err != nil {
+		t.Fatalf("categories unmarshal: %v", err)
+	}
+	if len(categories) != 1 || categories[0] != "net" {
+		t.Fatalf("categories = %v", categories)
+	}
+
+	var licenses []string
+	if err := json.Unmarshal(manifest["licenses"], &licenses); err != nil {
+		t.Fatalf("licenses unmarshal: %v", err)
+	}
+	if len(licenses) != 1 || licenses[0] != "Apache-2.0" {
+		t.Fatalf("licenses = %v", licenses)
+	}
+}
+
 func ndjsonLine(obj map[string]any) string {
 	b, err := json.Marshal(obj)
 	if err != nil {
