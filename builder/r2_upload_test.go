@@ -211,17 +211,25 @@ func newCloudflareR2UploadServer(t *testing.T, requestBody *bytes.Buffer) *httpt
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut {
-			t.Fatalf("method = %s, want PUT", r.Method)
+			t.Errorf("method = %s, want PUT", r.Method)
+			http.Error(w, "unexpected method", http.StatusBadRequest)
+			return
 		}
 		wantPath := "/accounts/account123/r2/buckets/bucket-name/objects/All/example.pkg"
 		if r.URL.Path != wantPath {
-			t.Fatalf("path = %s, want %s", r.URL.Path, wantPath)
+			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
+			http.Error(w, "unexpected path", http.StatusBadRequest)
+			return
 		}
 		if r.Header.Get("Authorization") != "Bearer token" {
-			t.Fatalf("Authorization = %q, want Bearer token", r.Header.Get("Authorization"))
+			t.Errorf("Authorization = %q, want Bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "unexpected authorization", http.StatusUnauthorized)
+			return
 		}
 		if _, err := io.Copy(requestBody, r.Body); err != nil {
-			t.Fatalf("read body: %v", err)
+			t.Errorf("read body: %v", err)
+			http.Error(w, "read body failed", http.StatusInternalServerError)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
