@@ -25,8 +25,6 @@ const (
 	maxR2ControlPlaneUploadBytes = 300 << 20
 )
 
-var pkgMetadataFiles = []string{"meta.conf", "meta", "packagesite.yaml", "packagesite.pkg", "data.pkg"}
-
 var r2AccountIDPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
 type r2Upload struct {
@@ -59,7 +57,10 @@ func uploadToR2(pkgFiles []string, metadataDir string) error {
 	}
 
 	client := cloudflare.NewClient(option.WithAPIToken(token))
-	uploads := r2Uploads(pkgFiles, metadataDir)
+	uploads, err := r2Uploads(pkgFiles, metadataDir)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), r2UploadTimeout)
 	defer cancel()
 
@@ -86,25 +87,26 @@ func requiredCloudflareAPIToken() (string, error) {
 	return token, nil
 }
 
-func r2Uploads(pkgFiles []string, metadataDir string) []r2Upload {
-	uploads := make([]r2Upload, 0, len(pkgFiles)+len(pkgMetadataFiles))
+func r2Uploads(pkgFiles []string, metadataDir string) ([]r2Upload, error) {
+	metadataPaths, err := repoMetadataPaths(metadataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	uploads := make([]r2Upload, 0, len(pkgFiles)+len(metadataPaths))
 	for _, src := range pkgFiles {
 		uploads = append(uploads, r2Upload{
 			sourcePath: src,
 			objectKey:  "All/" + filepath.Base(src),
 		})
 	}
-	for _, name := range pkgMetadataFiles {
-		src := filepath.Join(metadataDir, name)
-		if _, statErr := os.Stat(src); statErr != nil {
-			continue
-		}
+	for _, src := range metadataPaths {
 		uploads = append(uploads, r2Upload{
 			sourcePath: src,
-			objectKey:  name,
+			objectKey:  filepath.Base(src),
 		})
 	}
-	return uploads
+	return uploads, nil
 }
 
 func uploadR2Objects(

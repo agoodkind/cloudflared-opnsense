@@ -32,8 +32,7 @@ import (
 // ---- state files -----------------------------------------------------------
 
 const (
-	pluginName  = "os-cloudflared"
-	repoBaseURL = "https://cloudflared-opnsense-pkg.goodkind.io/All"
+	pluginName = "os-cloudflared"
 )
 
 var (
