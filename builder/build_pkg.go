@@ -250,80 +250,13 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	pkgName := pluginName + "-" + pkgVersion
 	logf("creating plugin package " + pkgName)
 
-	staging := filepath.Join(workDir, "plugin-staging")
-	if err := os.RemoveAll(staging); err != nil {
-		slog.Error("clean staging failed", "err", err, "path", staging)
-		return fmt.Errorf("remove %s: %w", staging, err)
-	}
-	if err := os.MkdirAll(staging, 0o755); err != nil {
-		slog.Error("create staging failed", "err", err, "path", staging)
-		return fmt.Errorf("mkdir %s: %w", staging, err)
-	}
-
 	revStr := strconv.Itoa(revision)
 	makeVars := []string{
-		"DESTDIR=" + staging,
-		"WRKSRC=" + staging,
 		"PLUGIN_VERSION=" + cfVersion,
 		"PLUGIN_REVISION=" + revStr,
 	}
-	if err := runMake(repoDir, "install", makeVars); err != nil {
-		return fmt.Errorf("make install: %w", err)
-	}
-
-	configdBin := filepath.Join(repoDir, "dist", "cloudflared-configd")
-	binDst := filepath.Join(staging, "usr", "local", "bin", "cloudflared-configd")
-	if err := copyFile(configdBin, binDst, 0o755); err != nil {
-		return fmt.Errorf("copy cloudflared-configd: %w", err)
-	}
-
-	if err := runMake(repoDir, "metadata", makeVars); err != nil {
-		return fmt.Errorf("make metadata: %w", err)
-	}
-
-	plistPath := filepath.Join(staging, "plist")
-	extraPlist := []string{
-		"/usr/local/bin/cloudflared-configd",
-		"@dir /var/log/cloudflared",
-		"@dir /usr/local/etc/cloudflared",
-	}
-	if err := appendPlistLines(plistPath, extraPlist); err != nil {
-		return err
-	}
-
-	manifestUCL, err := os.ReadFile(filepath.Join(staging, "+MANIFEST"))
-	if err != nil {
-		slog.Error("read plugin manifest failed", "err", err)
-		return fmt.Errorf("read +MANIFEST: %w", err)
-	}
-	parsedManifest, err := parseUCLManifest(string(manifestUCL))
-	if err != nil {
-		return fmt.Errorf("parse +MANIFEST: %w", err)
-	}
-	if err := setManifestDependency(
-		parsedManifest,
-		"cloudflared",
-		packageDependency{Version: cfVersion, Origin: cloudflaredPackageOrigin},
-	); err != nil {
-		return fmt.Errorf("set cloudflared dependency: %w", err)
-	}
-
-	desc, err := os.ReadFile(filepath.Join(staging, "+DESC"))
-	if err != nil {
-		slog.Error("read plugin desc failed", "err", err)
-		return fmt.Errorf("read +DESC: %w", err)
-	}
-
-	scripts := map[string]string{}
-	for _, s := range []struct{ file, key string }{
-		{"+POST_INSTALL", "post-install"},
-		{"+POST_DEINSTALL", "post-deinstall"},
-	} {
-		data, err := os.ReadFile(filepath.Join(staging, s.file))
-		if err != nil {
-			return fmt.Errorf("read %s: %w", s.file, err)
-		}
-		scripts[s.key] = string(data)
+	if err := runMake(repoDir, "opnsense-package", makeVars); err != nil {
+		return fmt.Errorf("make opnsense-package: %w", err)
 	}
 
 	outDir := filepath.Join(pkgRepoDir, "All")
@@ -332,19 +265,21 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 		return fmt.Errorf("mkdir %s: %w", outDir, err)
 	}
 
-	pkgFile := filepath.Join(outDir, pkgName+".pkg")
-	if err := createPkgArchive(
-		pkgFile, staging, plistPath,
-		parsedManifest, string(desc), scripts,
-	); err != nil {
-		return fmt.Errorf("create plugin package: %w", err)
+	srcPkg, dstPkg := pluginPackagePaths(repoDir, outDir, pkgName)
+	if err := copyFile(srcPkg, dstPkg, 0o644); err != nil {
+		return fmt.Errorf("copy plugin package: %w", err)
 	}
 
-	if _, err := os.Stat(pkgFile); err != nil {
-		return fmt.Errorf("plugin package not found: %s", pkgFile)
+	if _, err := os.Stat(dstPkg); err != nil {
+		return fmt.Errorf("plugin package not found: %s", dstPkg)
 	}
-	logf("plugin package: " + pkgFile)
+	logf("plugin package: " + dstPkg)
 	return nil
+}
+
+func pluginPackagePaths(repoDir, outDir, pkgName string) (string, string) {
+	return filepath.Join(repoDir, "work", "pkg", pkgName+".pkg"),
+		filepath.Join(outDir, pkgName+".pkg")
 }
 
 func runMake(repoDir, target string, vars []string) error {
@@ -362,22 +297,6 @@ func packageMakeCommand() string {
 		return "bmake"
 	}
 	return "make"
-}
-
-func appendPlistLines(path string, lines []string) error {
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		slog.Error("open plist for append failed", "err", err, "path", path)
-		return fmt.Errorf("open %s: %w", path, err)
-	}
-	defer f.Close()
-	for _, line := range lines {
-		if _, err := fmt.Fprintf(f, "%s\n", line); err != nil {
-			slog.Error("append plist line failed", "err", err, "path", path)
-			return fmt.Errorf("append to %s: %w", path, err)
-		}
-	}
-	return nil
 }
 
 // ---- pkg archive builder ---------------------------------------------------
@@ -736,115 +655,6 @@ func updatePkgRepository(cfVersion string, revision int) error {
 		return fmt.Errorf("pkg repo: %w", err)
 	}
 
-	// Remove the data= line from meta.conf so pkg doesn't look in /data/.
-	metaPath := filepath.Join(pkgRepoDir, "meta.conf")
-	if data, err := os.ReadFile(metaPath); err == nil {
-		filtered := filterLines(string(data), func(l string) bool {
-			return !strings.HasPrefix(strings.TrimSpace(l), "data =")
-		})
-		if err := os.WriteFile(metaPath, []byte(filtered), 0o600); err != nil {
-			slog.Warn("rewrite meta.conf failed", "err", err, "path", metaPath)
-		}
-	}
-
-	// Extract packagesite.yaml from the zstd-compressed packagesite.pkg.
-	pkgsitePkg := filepath.Join(pkgRepoDir, "packagesite.pkg")
-	pkgsiteYAML := filepath.Join(pkgRepoDir, "packagesite.yaml")
-	if err := extractZstdTar(pkgsitePkg, "packagesite.yaml", pkgsiteYAML); err != nil {
-		return fmt.Errorf("extract packagesite.yaml: %w", err)
-	}
-
-	pluginURL := repoBaseURL + "/" + pluginPkgName + ".pkg"
-	binaryURL := repoBaseURL + "/" + binaryPkgName + ".pkg"
-	logf(fmt.Sprintf("package URLs: plugin: %s  binary: %s", pluginURL, binaryURL))
-
-	// Patch each NDJSON line.
-	updated, err := patchPackageSite(pkgsiteYAML, pkgVersion, cfVersion, pluginURL, binaryURL)
-	if err != nil {
-		return fmt.Errorf("patch packagesite.yaml: %w", err)
-	}
-	if err := os.WriteFile(pkgsiteYAML, []byte(updated), 0o600); err != nil {
-		slog.Error("write packagesite.yaml failed", "err", err, "path", pkgsiteYAML)
-		return fmt.Errorf("write %s: %w", pkgsiteYAML, err)
-	}
-
-	// Recompress.
-	if err := os.Remove(pkgsitePkg); err != nil && !errors.Is(err, os.ErrNotExist) {
-		slog.Error("remove stale packagesite.pkg failed", "err", err, "path", pkgsitePkg)
-		return fmt.Errorf("remove %s: %w", pkgsitePkg, err)
-	}
-	if err := createZstdTar(pkgsitePkg, pkgsiteYAML, "packagesite.yaml"); err != nil {
-		return fmt.Errorf("recompress packagesite.pkg: %w", err)
-	}
-
 	logf("repository metadata updated")
 	return nil
-}
-
-// patchPackageSite rewrites the NDJSON packagesite.yaml so that os-cloudflared
-// and cloudflared entries carry absolute Cloudflare Tunnel URLs.
-func patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		slog.Error("read packagesite failed", "err", err, "path", path)
-		return "", fmt.Errorf("read %s: %w", path, err)
-	}
-
-	var out strings.Builder
-	for line := range strings.SplitSeq(strings.TrimRight(string(data), "\n"), "\n") {
-		if line == "" {
-			continue
-		}
-		patched, ok := patchPackageSiteLine(line, pluginVer, binaryVer, pluginURL, binaryURL)
-		if !ok {
-			out.WriteString(line + "\n")
-			continue
-		}
-		out.WriteString(patched)
-		out.WriteByte('\n')
-	}
-	return out.String(), nil
-}
-
-// patchPackageSiteLine rewrites a single NDJSON object, replacing path and
-// repopath with absolute URLs when the name and version identify one of the
-// packages this tool publishes. It returns ok=false when the line is not a
-// JSON object, so the caller can pass it through unchanged.
-func patchPackageSiteLine(line, pluginVer, binaryVer, pluginURL, binaryURL string) (string, bool) {
-	obj := map[string]json.RawMessage{}
-	if err := json.Unmarshal([]byte(line), &obj); err != nil {
-		return "", false
-	}
-
-	name := rawJSONString(obj["name"])
-	ver := rawJSONString(obj["version"])
-
-	switch {
-	case name == "os-cloudflared" && ver == pluginVer:
-		obj["path"] = jsonRawFromString(pluginURL)
-		obj["repopath"] = jsonRawFromString(pluginURL)
-	case name == "cloudflared" && ver == binaryVer:
-		obj["path"] = jsonRawFromString(binaryURL)
-		obj["repopath"] = jsonRawFromString(binaryURL)
-	}
-
-	b, err := json.Marshal(obj)
-	if err != nil {
-		slog.Error("re-encode packagesite line failed", "err", err)
-		return line, true
-	}
-	return string(b), true
-}
-
-// rawJSONString decodes a [json.RawMessage] that is expected to hold a JSON
-// string, returning "" when it is absent or not a string.
-func rawJSONString(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return ""
-	}
-	return s
 }

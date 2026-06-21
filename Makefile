@@ -24,6 +24,7 @@ PLUGIN_LICENSE=		BSD2CLAUSE
 
 # Vendored Mk/; opnsense-scripts/ and opnsense-templates/ (see Mk/defaults.mk).
 PLUGINSDIR=		${.CURDIR}
+PLUGIN_DEPENDS=		cloudflared
 
 # Satisfy defaults.mk when php/python are not on PATH (e.g. CI builder VM).
 PLUGIN_PHP?=		82
@@ -53,11 +54,23 @@ PREFIX=		/usr/local
 SERVICE=	${PREFIX}/opnsense/service/conf/actions.d
 MVC=		${PREFIX}/opnsense/mvc/app
 
-.PHONY: all build freebsd clean lint fmt release deploy-live
+.PHONY: all build freebsd clean lint fmt release deploy-live stage-configd
 
 .DEFAULT_GOAL:=	build
 
 all: build
+
+stage-configd:
+	@test -x ${CONFIGD_BIN} || { \
+		echo "missing ${CONFIGD_BIN}; run bmake freebsd first" >&2; \
+		exit 1; \
+	}
+	@mkdir -p contrib/bin
+	@install -m 755 ${CONFIGD_BIN} contrib/bin/cloudflared-configd
+
+install: stage-configd
+
+plist: stage-configd
 
 build:
 	@mkdir -p ${BUILD_DIR}
@@ -101,4 +114,7 @@ fmt:
 
 clean:
 	rm -rf ${BUILD_DIR}
+	rm -f contrib/bin/cloudflared-configd
+	rmdir contrib/bin 2> /dev/null || true
+	rmdir contrib 2> /dev/null || true
 	rm -rf ${.CURDIR}/work

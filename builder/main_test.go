@@ -35,95 +35,15 @@ func Test_emptyOr(t *testing.T) {
 	})
 }
 
-func Test_filterLines(t *testing.T) {
+func Test_pluginPackagePaths(t *testing.T) {
 	t.Parallel()
 
-	t.Run("keeps lines matching predicate", func(t *testing.T) {
-		t.Parallel()
-		got := filterLines("a\nb\nc\n", func(l string) bool { return l == "b" })
-		want := "b\n"
-		if got != want {
-			t.Fatalf("got %q want %q", got, want)
-		}
-	})
-
-	t.Run("drops lines not matching predicate", func(t *testing.T) {
-		t.Parallel()
-		got := filterLines("a\nb\n", func(l string) bool { return false })
-		want := ""
-		if got != want {
-			t.Fatalf("got %q want %q", got, want)
-		}
-	})
-
-	t.Run("empty string produces empty string", func(t *testing.T) {
-		t.Parallel()
-		got := filterLines("", func(l string) bool { return false })
-		if got != "" {
-			t.Fatalf("got %q want empty", got)
-		}
-	})
-
-	t.Run("all lines kept", func(t *testing.T) {
-		t.Parallel()
-		got := filterLines("x\ny", func(l string) bool { return true })
-		want := "x\ny\n"
-		if got != want {
-			t.Fatalf("got %q want %q", got, want)
-		}
-	})
-
-	t.Run("all lines dropped", func(t *testing.T) {
-		t.Parallel()
-		got := filterLines("x\ny\n", func(l string) bool { return false })
-		if got != "" {
-			t.Fatalf("got %q want empty", got)
-		}
-	})
-}
-
-func Test_setManifestDependency(t *testing.T) {
-	t.Parallel()
-
-	manifest := strings.Join([]string{
-		"name: os-cloudflared",
-		"version: \"2026.1.1_999\"",
-		"origin: opnsense/os-cloudflared",
-		"prefix: /usr/local",
-		"",
-	}, "\n")
-
-	parsed, err := parseUCLManifest(manifest)
-	if err != nil {
-		t.Fatalf("parseUCLManifest: %v", err)
+	src, dst := pluginPackagePaths("/repo", "/out", "os-cloudflared-2026.6.0_1")
+	if src != filepath.Join("/repo", "work", "pkg", "os-cloudflared-2026.6.0_1.pkg") {
+		t.Fatalf("src = %q", src)
 	}
-	if err := setManifestDependency(
-		parsed,
-		"cloudflared",
-		packageDependency{Version: "2026.1.1", Origin: cloudflaredPackageOrigin},
-	); err != nil {
-		t.Fatalf("setManifestDependency: %v", err)
-	}
-
-	rawDeps, ok := parsed["deps"]
-	if !ok {
-		t.Fatal("missing deps in parsed manifest")
-	}
-
-	var deps map[string]packageDependency
-	if err := json.Unmarshal(rawDeps, &deps); err != nil {
-		t.Fatalf("unmarshal deps: %v", err)
-	}
-
-	dependency, ok := deps["cloudflared"]
-	if !ok {
-		t.Fatalf("deps = %v, want cloudflared", deps)
-	}
-	if dependency.Version != "2026.1.1" {
-		t.Fatalf("cloudflared version = %q, want 2026.1.1", dependency.Version)
-	}
-	if dependency.Origin != "net/cloudflared" {
-		t.Fatalf("cloudflared origin = %q, want net/cloudflared", dependency.Origin)
+	if dst != filepath.Join("/out", "os-cloudflared-2026.6.0_1.pkg") {
+		t.Fatalf("dst = %q", dst)
 	}
 }
 
@@ -148,7 +68,10 @@ func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 		t.Fatal("missing deps in parsed manifest")
 	}
 
-	var deps map[string]packageDependency
+	var deps map[string]struct {
+		Version string `json:"version"`
+		Origin  string `json:"origin"`
+	}
 	if err := json.Unmarshal(rawDeps, &deps); err != nil {
 		t.Fatalf("unmarshal deps: %v", err)
 	}
@@ -162,38 +85,6 @@ func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 	}
 	if dependency.Origin != cloudflaredPackageOrigin {
 		t.Fatalf("cloudflared origin = %q, want %s", dependency.Origin, cloudflaredPackageOrigin)
-	}
-}
-
-func Test_setManifestDependencyReplacesNullDeps(t *testing.T) {
-	t.Parallel()
-
-	manifest := map[string]json.RawMessage{
-		"name": json.RawMessage(`"os-cloudflared"`),
-		"deps": json.RawMessage(`null`),
-	}
-
-	if err := setManifestDependency(
-		manifest,
-		"cloudflared",
-		packageDependency{Version: "2026.6.1", Origin: cloudflaredPackageOrigin},
-	); err != nil {
-		t.Fatalf("setManifestDependency: %v", err)
-	}
-
-	var deps map[string]packageDependency
-	if err := json.Unmarshal(manifest["deps"], &deps); err != nil {
-		t.Fatalf("unmarshal deps: %v", err)
-	}
-	if deps == nil {
-		t.Fatal("deps is nil after setting dependency")
-	}
-	dependency, ok := deps["cloudflared"]
-	if !ok {
-		t.Fatalf("deps = %v, want cloudflared", deps)
-	}
-	if dependency.Version != "2026.6.1" {
-		t.Fatalf("cloudflared version = %q, want 2026.6.1", dependency.Version)
 	}
 }
 
@@ -227,34 +118,6 @@ func Test_parseUCLManifestParsesBinaryTemplate(t *testing.T) {
 	if len(licenses) != 1 || licenses[0] != "Apache-2.0" {
 		t.Fatalf("licenses = %v", licenses)
 	}
-}
-
-func ndjsonLine(obj map[string]any) string {
-	b, err := json.Marshal(obj)
-	if err != nil {
-		panic(err)
-	}
-	return string(b)
-}
-
-func parseNDJSON(t *testing.T, s string) []map[string]any {
-	t.Helper()
-	if s == "" {
-		return nil
-	}
-	lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
-	out := make([]map[string]any, 0, len(lines))
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		var m map[string]any
-		if err := json.Unmarshal([]byte(line), &m); err != nil {
-			t.Fatalf("parse line: %v", err)
-		}
-		out = append(out, m)
-	}
-	return out
 }
 
 func Test_parseUCLManifest(t *testing.T) {
@@ -464,159 +327,6 @@ func readPkgManifestFiles(t *testing.T, pkgPath string) ([]byte, []byte) {
 	return manifestBody, compactManifestBody
 }
 
-func Test_patchPackageSite(t *testing.T) {
-	t.Parallel()
-
-	pluginVer := "2024.1.0_1"
-	binaryVer := "2024.1.0"
-	pluginURL := "https://example.com/os-cloudflared.pkg"
-	binaryURL := "https://example.com/cloudflared.pkg"
-
-	t.Run("file not found returns error", func(t *testing.T) {
-		t.Parallel()
-		_, err := patchPackageSite(
-			filepath.Join(t.TempDir(), "nope.ndjson"),
-			pluginVer, binaryVer, pluginURL, binaryURL,
-		)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("expected ErrNotExist, got %v", err)
-		}
-	})
-
-	t.Run("non-JSON lines are passed through unchanged", func(t *testing.T) {
-		t.Parallel()
-		path := filepath.Join(t.TempDir(), "in.ndjson")
-		raw := "not json at all\n"
-		if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got != raw {
-			t.Fatalf("got %q want %q", got, raw)
-		}
-	})
-
-	t.Run("patches os-cloudflared line with matching version", func(t *testing.T) {
-		t.Parallel()
-		path := filepath.Join(t.TempDir(), "in.ndjson")
-		line := ndjsonLine(map[string]any{
-			"name":     "os-cloudflared",
-			"version":  pluginVer,
-			"path":     "old-plugin",
-			"repopath": "old-plugin",
-		})
-		if err := os.WriteFile(path, []byte(line+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		objs := parseNDJSON(t, got)
-		if len(objs) != 1 {
-			t.Fatalf("want 1 object, got %d", len(objs))
-		}
-		o := objs[0]
-		if o["path"] != pluginURL || o["repopath"] != pluginURL {
-			t.Fatalf("path/repopath: %+v", o)
-		}
-	})
-
-	t.Run("patches cloudflared binary line with matching version", func(t *testing.T) {
-		t.Parallel()
-		path := filepath.Join(t.TempDir(), "in.ndjson")
-		line := ndjsonLine(map[string]any{
-			"name":     "cloudflared",
-			"version":  binaryVer,
-			"path":     "old-bin",
-			"repopath": "old-bin",
-		})
-		if err := os.WriteFile(path, []byte(line+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		objs := parseNDJSON(t, got)
-		if len(objs) != 1 {
-			t.Fatalf("want 1 object, got %d", len(objs))
-		}
-		o := objs[0]
-		if o["path"] != binaryURL || o["repopath"] != binaryURL {
-			t.Fatalf("path/repopath: %+v", o)
-		}
-	})
-
-	t.Run("non-matching name/version leaves path and repopath unchanged", func(t *testing.T) {
-		t.Parallel()
-		path := filepath.Join(t.TempDir(), "in.ndjson")
-		line := ndjsonLine(map[string]any{
-			"name":     "cloudflared",
-			"version":  "other",
-			"path":     "keep-me",
-			"repopath": "keep-me-too",
-		})
-		if err := os.WriteFile(path, []byte(line+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		objs := parseNDJSON(t, got)
-		if len(objs) != 1 {
-			t.Fatalf("want 1 object, got %d", len(objs))
-		}
-		o := objs[0]
-		if o["path"] != "keep-me" || o["repopath"] != "keep-me-too" {
-			t.Fatalf("path/repopath: %+v", o)
-		}
-	})
-
-	t.Run("trailing newline on input is handled", func(t *testing.T) {
-		t.Parallel()
-		path := filepath.Join(t.TempDir(), "in.ndjson")
-		content := ndjsonLine(map[string]any{"name": "x", "version": "1"}) + "\n\n"
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		objs := parseNDJSON(t, got)
-		if len(objs) != 1 {
-			t.Fatalf("want 1 object, got %d", len(objs))
-		}
-	})
-
-	t.Run("empty lines are skipped", func(t *testing.T) {
-		t.Parallel()
-		path := filepath.Join(t.TempDir(), "in.ndjson")
-		l1 := ndjsonLine(map[string]any{"name": "a", "version": "1"})
-		l2 := ndjsonLine(map[string]any{"name": "b", "version": "2"})
-		raw := l1 + "\n\n" + l2 + "\n"
-		if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		got, err := patchPackageSite(path, pluginVer, binaryVer, pluginURL, binaryURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
-		if len(lines) != 2 {
-			t.Fatalf("want 2 output lines, got %d: %q", len(lines), got)
-		}
-	})
-}
-
 func Test_copyFile(t *testing.T) {
 	t.Parallel()
 
@@ -709,186 +419,6 @@ func Test_copyFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		err := copyFile(src, dstDir, 0o644)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-}
-
-func Test_createZstdTar_extractZstdTar(t *testing.T) {
-	t.Parallel()
-
-	t.Run("round-trip content matches original", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		orig := filepath.Join(tmp, "original.txt")
-		want := []byte("payload data\n")
-		if err := os.WriteFile(orig, want, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		archive := filepath.Join(tmp, "out.tar.zst")
-		if err := createZstdTar(archive, orig, "inner/name.txt"); err != nil {
-			t.Fatal(err)
-		}
-		extracted := filepath.Join(tmp, "extracted.txt")
-		if err := extractZstdTar(archive, "name.txt", extracted); err != nil {
-			t.Fatal(err)
-		}
-		got, err := os.ReadFile(extracted)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(got) != string(want) {
-			t.Fatalf("got %q want %q", got, want)
-		}
-	})
-
-	t.Run("extract matches full header name", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		orig := filepath.Join(tmp, "original.txt")
-		if err := os.WriteFile(orig, []byte("full"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		archive := filepath.Join(tmp, "full.tar.zst")
-		nameInArchive := "repo/pkg/file.txt"
-		if err := createZstdTar(archive, orig, nameInArchive); err != nil {
-			t.Fatal(err)
-		}
-		out := filepath.Join(tmp, "out.txt")
-		if err := extractZstdTar(archive, nameInArchive, out); err != nil {
-			t.Fatal(err)
-		}
-		got, err := os.ReadFile(out)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(got) != "full" {
-			t.Fatalf("got %q", got)
-		}
-	})
-
-	t.Run("invalid zstd stream returns error", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		bad := filepath.Join(tmp, "bad.zst")
-		if err := os.WriteFile(bad, []byte{0x00, 0x01, 0x02}, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		err := extractZstdTar(bad, "x", filepath.Join(tmp, "out.txt"))
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-
-	t.Run("invalid tar after zstd returns error from tar reader", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		var buf bytes.Buffer
-		zw, err := zstd.NewWriter(&buf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := zw.Write([]byte("this is not a tar archive")); err != nil {
-			t.Fatal(err)
-		}
-		if err := zw.Close(); err != nil {
-			t.Fatal(err)
-		}
-		arc := filepath.Join(tmp, "bad.tar.zst")
-		if err := os.WriteFile(arc, buf.Bytes(), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		err = extractZstdTar(arc, "any.txt", filepath.Join(tmp, "out.txt"))
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-
-	t.Run("extract output path is an existing directory", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		orig := filepath.Join(tmp, "f.txt")
-		if err := os.WriteFile(orig, []byte("q"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		archive := filepath.Join(tmp, "a.tar.zst")
-		if err := createZstdTar(archive, orig, "only.txt"); err != nil {
-			t.Fatal(err)
-		}
-		outDir := filepath.Join(tmp, "outdir")
-		if err := os.MkdirAll(outDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		err := extractZstdTar(archive, "only.txt", outDir)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
-
-	t.Run("extract missing member returns not found error", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		orig := filepath.Join(tmp, "f.txt")
-		if err := os.WriteFile(orig, []byte("z"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		archive := filepath.Join(tmp, "a.tar.zst")
-		if err := createZstdTar(archive, orig, "only.txt"); err != nil {
-			t.Fatal(err)
-		}
-		err := extractZstdTar(archive, "ghost.txt", filepath.Join(tmp, "out.txt"))
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !strings.Contains(err.Error(), "not found") {
-			t.Fatalf("error: %v", err)
-		}
-	})
-
-	t.Run("extract with non-existent archive returns error", func(t *testing.T) {
-		t.Parallel()
-		err := extractZstdTar(
-			filepath.Join(t.TempDir(), "missing.tar.zst"),
-			"x",
-			filepath.Join(t.TempDir(), "out.txt"),
-		)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("got %v", err)
-		}
-	})
-
-	t.Run("create with non-existent source file returns error", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		err := createZstdTar(
-			filepath.Join(tmp, "out.tar.zst"),
-			filepath.Join(tmp, "missing.txt"),
-			"name",
-		)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("got %v", err)
-		}
-	})
-
-	t.Run("create fails when archive path is an existing directory", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		orig := filepath.Join(tmp, "src.txt")
-		if err := os.WriteFile(orig, []byte("data"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		archiveDir := filepath.Join(tmp, "archive.zst")
-		if err := os.MkdirAll(archiveDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		err := createZstdTar(archiveDir, orig, "name")
 		if err == nil {
 			t.Fatal("expected error")
 		}
