@@ -54,7 +54,7 @@ PREFIX=		/usr/local
 SERVICE=	${PREFIX}/opnsense/service/conf/actions.d
 MVC=		${PREFIX}/opnsense/mvc/app
 
-.PHONY: all build freebsd clean lint fmt release deploy-live
+.PHONY: all build freebsd clean lint fmt release deploy-live stage-configd
 
 .DEFAULT_GOAL:=	build
 

@@ -39,10 +39,10 @@ func Test_pluginPackagePaths(t *testing.T) {
 	t.Parallel()
 
 	src, dst := pluginPackagePaths("/repo", "/out", "os-cloudflared-2026.6.0_1")
-	if src != "/repo/work/pkg/os-cloudflared-2026.6.0_1.pkg" {
+	if src != filepath.Join("/repo", "work", "pkg", "os-cloudflared-2026.6.0_1.pkg") {
 		t.Fatalf("src = %q", src)
 	}
-	if dst != "/out/os-cloudflared-2026.6.0_1.pkg" {
+	if dst != filepath.Join("/out", "os-cloudflared-2026.6.0_1.pkg") {
 		t.Fatalf("dst = %q", dst)
 	}
 }
