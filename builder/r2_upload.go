@@ -241,9 +241,10 @@ func prefixedUploads(uploads []r2Upload, keyPrefix string) []r2Upload {
 	return prefixed
 }
 
-// roundTripR2Objects uploads, verifies, and then deletes each object. Uploaded
-// keys are always deleted on return, including the partial set when a later
-// step fails, so a preview never leaves objects in the bucket.
+// roundTripR2Objects uploads and verifies each object, then deletes every
+// uploaded key in a deferred cleanup that runs on return, including the partial
+// set when a later step fails. Delete failures are logged rather than returned,
+// so a preview never intentionally leaves objects in the bucket.
 func roundTripR2Objects(
 	ctx context.Context,
 	client r2ObjectRoundTripper,
@@ -283,7 +284,7 @@ func roundTripR2Objects(
 	}
 
 	logf(fmt.Sprintf(
-		"R2 preview round-trip complete: %d objects uploaded, verified, and deleted",
+		"R2 preview round-trip: %d objects uploaded and verified; deleting on return",
 		len(uploads),
 	))
 	return nil
