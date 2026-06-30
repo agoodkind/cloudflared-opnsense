@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cloudflare/cloudflare-go/v7"
@@ -45,6 +46,119 @@ func (u *recordingR2Uploader) Upload(
 		accountID:  params.AccountID.Value,
 	})
 	return &r2.BucketObjectUploadResponse{}, nil
+}
+
+// recordingR2Client records uploads, verification reads, and deletes so the
+// preview round-trip can be asserted without a live Cloudflare account.
+type recordingR2Client struct {
+	recordingR2Uploader
+	gets      []string
+	deletes   []string
+	getStatus int
+}
+
+func (c *recordingR2Client) Get(
+	_ context.Context,
+	_ string,
+	objectKey string,
+	_ r2.BucketObjectGetParams,
+	_ ...option.RequestOption,
+) (*http.Response, error) {
+	c.gets = append(c.gets, objectKey)
+	status := c.getStatus
+	if status == 0 {
+		status = http.StatusOK
+	}
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader("ok")),
+	}, nil
+}
+
+func (c *recordingR2Client) Delete(
+	_ context.Context,
+	_ string,
+	objectKey string,
+	_ r2.BucketObjectDeleteParams,
+	_ ...option.RequestOption,
+) (*r2.BucketObjectDeleteResponse, error) {
+	c.deletes = append(c.deletes, objectKey)
+	return &r2.BucketObjectDeleteResponse{}, nil
+}
+
+func TestPrefixedUploadsPrependsPrefix(t *testing.T) {
+	t.Parallel()
+
+	uploads := []r2Upload{
+		{sourcePath: "/tmp/a.pkg", objectKey: "All/a.pkg"},
+		{sourcePath: "/tmp/meta.conf", objectKey: "meta.conf"},
+	}
+
+	got := prefixedUploads(uploads, "/previews/pr-12/")
+	want := []r2Upload{
+		{sourcePath: "/tmp/a.pkg", objectKey: "previews/pr-12/All/a.pkg"},
+		{sourcePath: "/tmp/meta.conf", objectKey: "previews/pr-12/meta.conf"},
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("prefixedUploads[%d] = %#v, want %#v", i, got[i], want[i])
+		}
+	}
+
+	if same := prefixedUploads(uploads, ""); same[0] != uploads[0] {
+		t.Fatalf("empty prefix changed uploads: %#v", same)
+	}
+}
+
+func TestRoundTripR2ObjectsUploadsVerifiesDeletes(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	src := filepath.Join(tempDir, "pkg")
+	if err := os.WriteFile(src, []byte("contents"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	client := &recordingR2Client{}
+	key := "previews/pr-1/All/pkg"
+	err := roundTripR2Objects(context.Background(), client, "account123", "bucket-name", []r2Upload{
+		{sourcePath: src, objectKey: key},
+	})
+	if err != nil {
+		t.Fatalf("roundTripR2Objects: %v", err)
+	}
+
+	if len(client.uploads) != 1 || client.uploads[0].objectKey != key {
+		t.Fatalf("uploads = %#v, want one upload of %q", client.uploads, key)
+	}
+	if len(client.gets) != 1 || client.gets[0] != key {
+		t.Fatalf("gets = %#v, want [%q]", client.gets, key)
+	}
+	if len(client.deletes) != 1 || client.deletes[0] != key {
+		t.Fatalf("deletes = %#v, want [%q]", client.deletes, key)
+	}
+}
+
+func TestRoundTripR2ObjectsDeletesAfterVerifyFailure(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	src := filepath.Join(tempDir, "pkg")
+	if err := os.WriteFile(src, []byte("contents"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	client := &recordingR2Client{getStatus: http.StatusNotFound}
+	key := "previews/pr-1/All/pkg"
+	err := roundTripR2Objects(context.Background(), client, "account123", "bucket-name", []r2Upload{
+		{sourcePath: src, objectKey: key},
+	})
+	if err == nil {
+		t.Fatal("roundTripR2Objects succeeded despite a failed verification")
+	}
+	if len(client.deletes) != 1 || client.deletes[0] != key {
+		t.Fatalf("deletes = %#v, want the uploaded object cleaned up", client.deletes)
+	}
 }
 
 func TestR2UploadsMapsPackagesAndMetadata(t *testing.T) {

@@ -76,6 +76,8 @@ func main() {
 	workDirFlag := fs.String("work-dir", workDir, "scratch directory for builds")
 	pkgRepoDirFlag := fs.String("pkg-repo-dir", pkgRepoDir, "directory for pkg repository output")
 	checkOnly := fs.Bool("check-only", false, "publish: decide and emit outputs only, skip upload and release")
+	preview := fs.Bool("preview", false, "publish: round-trip packages through a throwaway prefix (upload, verify, delete); never release")
+	previewPrefix := fs.String("preview-prefix", "", "publish: key prefix for -preview objects (for example previews/pr-12)")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		os.Exit(1)
@@ -88,11 +90,13 @@ func main() {
 	}
 
 	cfg := &config{
-		force:     *force,
-		version:   *versionFlag,
-		revision:  *revisionFlag,
-		repoDir:   *repoDir,
-		checkOnly: *checkOnly,
+		force:         *force,
+		version:       *versionFlag,
+		revision:      *revisionFlag,
+		repoDir:       *repoDir,
+		checkOnly:     *checkOnly,
+		preview:       *preview,
+		previewPrefix: *previewPrefix,
 	}
 
 	// Override package-level path vars from flags so all functions
@@ -141,7 +145,8 @@ var errUpToDate = errors.New("already up-to-date")
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr,
-		"usage: cloudflared-builder [-force] [-version v] [-revision n] [-repo-dir d] [-check-only]"+
+		"usage: cloudflared-builder [-force] [-version v] [-revision n] [-repo-dir d]"+
+			" [-check-only] [-preview] [-preview-prefix p]"+
 			" <check|plan|build|package|repo|publish|run>")
 }
 
@@ -164,11 +169,13 @@ func autoRepoDir() string {
 // ---- config ----------------------------------------------------------------
 
 type config struct {
-	force     bool
-	version   string
-	revision  int // 0 = derive from state files
-	repoDir   string
-	checkOnly bool // publish: decide and emit outputs only, skip upload and release
+	force         bool
+	version       string
+	revision      int // 0 = derive from state files
+	repoDir       string
+	checkOnly     bool   // publish: decide and emit outputs only, skip upload and release
+	preview       bool   // publish: round-trip through a throwaway prefix, never release
+	previewPrefix string // publish: key prefix for preview objects
 }
 
 func (c *config) resolve() (version string, revision int, err error) {
@@ -202,6 +209,18 @@ func (c *config) resolve() (version string, revision int, err error) {
 		}
 	}
 	return v, rev, nil
+}
+
+// validatePublishFlags rejects flag combinations that would silently change the
+// publish behavior, so a misconfigured CI step or local run fails loudly.
+func (c *config) validatePublishFlags() error {
+	if c.preview && c.checkOnly {
+		return errors.New("publish: -preview and -check-only are mutually exclusive")
+	}
+	if c.previewPrefix != "" && !c.preview {
+		return errors.New("publish: -preview-prefix requires -preview")
+	}
+	return nil
 }
 
 // ---- commands --------------------------------------------------------------
@@ -254,6 +273,10 @@ func cmdRepo(cfg *config) error {
 // -check-only it emits the decision to GITHUB_OUTPUT and stops, so the workflow
 // can gate later steps without performing any publish.
 func cmdPublish(cfg *config) error {
+	if err := cfg.validatePublishFlags(); err != nil {
+		return err
+	}
+
 	v, rev, err := cfg.resolve()
 	if err != nil {
 		return err
@@ -272,6 +295,9 @@ func cmdPublish(cfg *config) error {
 
 	if cfg.checkOnly {
 		return nil
+	}
+	if cfg.preview {
+		return previewPublish(v, rev, cfg, decision)
 	}
 	if !decision.shouldPublish {
 		logf("skipping publish: " + decision.reason)

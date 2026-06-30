@@ -505,6 +505,34 @@ func Test_readRevision(t *testing.T) {
 	})
 }
 
+func Test_validatePublishFlags(t *testing.T) {
+	t.Parallel()
+
+	t.Run("rejects preview with check-only", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config{preview: true, checkOnly: true}
+		if err := cfg.validatePublishFlags(); err == nil {
+			t.Fatal("validatePublishFlags accepted -preview with -check-only")
+		}
+	})
+
+	t.Run("rejects preview-prefix without preview", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config{previewPrefix: "previews/pr-1"}
+		if err := cfg.validatePublishFlags(); err == nil {
+			t.Fatal("validatePublishFlags accepted -preview-prefix without -preview")
+		}
+	})
+
+	t.Run("accepts preview with a prefix", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config{preview: true, previewPrefix: "previews/pr-1"}
+		if err := cfg.validatePublishFlags(); err != nil {
+			t.Fatalf("validatePublishFlags rejected a valid preview config: %v", err)
+		}
+	})
+}
+
 func Test_saveState(t *testing.T) {
 	t.Run("writes version and revision to separate files", func(t *testing.T) {
 		dir := t.TempDir()
