@@ -175,3 +175,61 @@ jobs:
             -repo-dir "${GITHUB_WORKSPACE}" \
             -pkg-repo-dir _artifact \
             publish
+
+  preview-publish:
+    needs: [check, build]
+    if: >-
+      needs.build.result == 'success' &&
+      github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.check.outputs.version }}
+      REVISION: ${{ needs.check.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: builder/go.mod
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: pkg-build
+          path: _artifact
+
+      - name: Build the publisher
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/dist"
+          cd builder && go build -trimpath -buildvcs=false -o "${GITHUB_WORKSPACE}/dist/cloudflared-builder" .
+
+      - name: Check R2 credentials are present
+        id: creds
+        # Fork PRs do not receive secrets, so the token is empty there. Same-repo
+        # and Dependabot PRs do, so the round-trip runs and catches publish
+        # breakage before merge.
+        run: |
+          if [[ -n "${CLOUDFLARE_API_TOKEN}" && -n "${CF_ACCOUNT_ID}" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "R2 credentials are not available (likely a fork PR); skipping preview publish."
+          fi
+
+      - name: Preview-publish round-trip to R2
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          dist/cloudflared-builder \
+            -version "${VERSION}" \
+            -revision "${REVISION}" \
+            -repo-dir "${GITHUB_WORKSPACE}" \
+            -pkg-repo-dir _artifact \
+            -preview \
+            -preview-prefix "previews/pr-${{ github.event.pull_request.number }}" \
+            publish

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/cloudflare/cloudflare-go/v7"
@@ -161,6 +163,144 @@ func uploadR2Object(
 	})
 	if err != nil {
 		return fmt.Errorf("upload %s to R2 key %s: %w", upload.sourcePath, upload.objectKey, err)
+	}
+	return nil
+}
+
+// ---- preview round-trip ----------------------------------------------------
+
+type r2ObjectGetter interface {
+	Get(
+		ctx context.Context,
+		bucketName string,
+		objectKey string,
+		params r2.BucketObjectGetParams,
+		opts ...option.RequestOption,
+	) (*http.Response, error)
+}
+
+type r2ObjectDeleter interface {
+	Delete(
+		ctx context.Context,
+		bucketName string,
+		objectKey string,
+		params r2.BucketObjectDeleteParams,
+		opts ...option.RequestOption,
+	) (*r2.BucketObjectDeleteResponse, error)
+}
+
+// r2ObjectRoundTripper is the subset of the Cloudflare R2 object API needed to
+// upload, verify, and delete preview objects.
+type r2ObjectRoundTripper interface {
+	r2ObjectUploader
+	r2ObjectGetter
+	r2ObjectDeleter
+}
+
+// previewPublishToR2 uploads each package and metadata file under a throwaway
+// key prefix, verifies it is readable, then deletes it. It exercises the same
+// credentials and upload path as a real publish without creating a release or
+// leaving objects behind, so a pull request can confirm publishing still works.
+func previewPublishToR2(pkgFiles []string, metadataDir, keyPrefix string) error {
+	accountID, err := requiredR2AccountID()
+	if err != nil {
+		return err
+	}
+	token, err := requiredCloudflareAPIToken()
+	if err != nil {
+		return err
+	}
+
+	client := cloudflare.NewClient(option.WithAPIToken(token))
+	uploads, err := r2Uploads(pkgFiles, metadataDir)
+	if err != nil {
+		return err
+	}
+	uploads = prefixedUploads(uploads, keyPrefix)
+
+	ctx, cancel := context.WithTimeout(context.Background(), r2UploadTimeout)
+	defer cancel()
+
+	return roundTripR2Objects(ctx, client.R2.Buckets.Objects, accountID, r2Bucket, uploads)
+}
+
+// prefixedUploads returns copies of uploads with keyPrefix prepended to each
+// object key, so preview objects never collide with the production layout.
+func prefixedUploads(uploads []r2Upload, keyPrefix string) []r2Upload {
+	trimmed := strings.Trim(keyPrefix, "/")
+	if trimmed == "" {
+		return uploads
+	}
+	prefixed := make([]r2Upload, len(uploads))
+	for i, upload := range uploads {
+		prefixed[i] = r2Upload{
+			sourcePath: upload.sourcePath,
+			objectKey:  trimmed + "/" + upload.objectKey,
+		}
+	}
+	return prefixed
+}
+
+// roundTripR2Objects uploads, verifies, and then deletes each object. Uploaded
+// keys are always deleted on return, including the partial set when a later
+// step fails, so a preview never leaves objects in the bucket.
+func roundTripR2Objects(
+	ctx context.Context,
+	client r2ObjectRoundTripper,
+	accountID string,
+	bucketName string,
+	uploads []r2Upload,
+) error {
+	uploadedKeys := make([]string, 0, len(uploads))
+	defer func() {
+		for _, key := range uploadedKeys {
+			_, err := client.Delete(ctx, bucketName, key, r2.BucketObjectDeleteParams{
+				AccountID: cloudflare.F(accountID),
+			})
+			if err != nil {
+				slog.WarnContext(ctx, "preview cleanup delete failed", "err", err, "key", key)
+			}
+		}
+	}()
+
+	for _, upload := range uploads {
+		if err := uploadR2Object(ctx, client, accountID, bucketName, upload); err != nil {
+			return err
+		}
+		uploadedKeys = append(uploadedKeys, upload.objectKey)
+		if err := verifyR2Object(ctx, client, accountID, bucketName, upload.objectKey); err != nil {
+			return err
+		}
+	}
+
+	logf(fmt.Sprintf(
+		"R2 preview round-trip complete: %d objects uploaded, verified, and deleted",
+		len(uploads),
+	))
+	return nil
+}
+
+// verifyR2Object confirms a freshly uploaded preview object is readable.
+func verifyR2Object(
+	ctx context.Context,
+	getter r2ObjectGetter,
+	accountID string,
+	bucketName string,
+	objectKey string,
+) error {
+	resp, err := getter.Get(ctx, bucketName, objectKey, r2.BucketObjectGetParams{
+		AccountID: cloudflare.F(accountID),
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "read back preview object failed", "err", err, "key", objectKey)
+		return fmt.Errorf("verify preview object %s: %w", objectKey, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		statusErr := fmt.Errorf("verify preview object %s: status %d", objectKey, resp.StatusCode)
+		slog.ErrorContext(ctx, "preview object read back non-OK status", "err", statusErr, "key", objectKey)
+		return statusErr
 	}
 	return nil
 }
