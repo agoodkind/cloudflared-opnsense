@@ -253,12 +253,21 @@ func roundTripR2Objects(
 ) error {
 	uploadedKeys := make([]string, 0, len(uploads))
 	defer func() {
+		if len(uploadedKeys) == 0 {
+			return
+		}
+		// Detach from the caller's cancellation for cleanup: ctx may already be
+		// canceled or timed out (a likely failure mode), and reusing it would
+		// make the deletes fail immediately and leave preview objects behind.
+		// WithoutCancel keeps context values while dropping that cancellation.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r2UploadTimeout)
+		defer cancel()
 		for _, key := range uploadedKeys {
-			_, err := client.Delete(ctx, bucketName, key, r2.BucketObjectDeleteParams{
+			_, err := client.Delete(cleanupCtx, bucketName, key, r2.BucketObjectDeleteParams{
 				AccountID: cloudflare.F(accountID),
 			})
 			if err != nil {
-				slog.WarnContext(ctx, "preview cleanup delete failed", "err", err, "key", key)
+				slog.WarnContext(cleanupCtx, "preview cleanup delete failed", "err", err, "key", key)
 			}
 		}
 	}()

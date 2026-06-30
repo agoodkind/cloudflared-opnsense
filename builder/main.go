@@ -211,6 +211,18 @@ func (c *config) resolve() (version string, revision int, err error) {
 	return v, rev, nil
 }
 
+// validatePublishFlags rejects flag combinations that would silently change the
+// publish behavior, so a misconfigured CI step or local run fails loudly.
+func (c *config) validatePublishFlags() error {
+	if c.preview && c.checkOnly {
+		return errors.New("publish: -preview and -check-only are mutually exclusive")
+	}
+	if c.previewPrefix != "" && !c.preview {
+		return errors.New("publish: -preview-prefix requires -preview")
+	}
+	return nil
+}
+
 // ---- commands --------------------------------------------------------------
 
 func cmdCheck(cfg *config) error {
@@ -261,6 +273,10 @@ func cmdRepo(cfg *config) error {
 // -check-only it emits the decision to GITHUB_OUTPUT and stops, so the workflow
 // can gate later steps without performing any publish.
 func cmdPublish(cfg *config) error {
+	if err := cfg.validatePublishFlags(); err != nil {
+		return err
+	}
+
 	v, rev, err := cfg.resolve()
 	if err != nil {
 		return err
