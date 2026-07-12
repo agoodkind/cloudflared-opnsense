@@ -38,8 +38,8 @@ it is disabled.
 The repository has two Go modules. The root module builds the router helper,
 and `builder/` packages and publishes the FreeBSD artifacts.
 
-Install Go 1.26.5 or later. On macOS, install BSD Make with `brew install
-bmake`, because the root Makefile uses BSD Make syntax.
+Install the Go version declared by each module. On macOS, install BSD Make with
+`brew install bmake`, because the root Makefile uses BSD Make syntax.
 
 ```sh
 # Build the router helper for the current host.
@@ -65,8 +65,8 @@ and a temporary R2 upload, readback, and cleanup when repository credentials
 are available. Pull requests never create releases or publish production
 objects.
 
-The workflow verifies both Go modules, builds the FreeBSD packages in a
-FreeBSD 14.2 VM, and generates package repository metadata. On non-pull-request
+The workflow verifies both Go modules, builds the FreeBSD packages in its
+configured VM, and generates package repository metadata. On non-pull-request
 runs, it compares each newly built package with the latest release for the same
 upstream version. It publishes to Cloudflare R2 and creates a GitHub release
 only when a package is new or its installed content changed.
