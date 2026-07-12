@@ -49,7 +49,7 @@ The legacy `cloudflared-opnsense-pkg.goodkind.io` nginx host on `freebsd-dev` is
 
 ### Development machine (macOS or Linux)
 
-- Go 1.26.4+ (matching `go.mod`)
+- Go 1.26.5+ (matching `go.mod`)
 - For BSD-make targets locally: `brew install bmake` (macOS `/usr/bin/make` is GNU make and does not parse `Mk/plugins.mk`)
 
 ### CI runtime
