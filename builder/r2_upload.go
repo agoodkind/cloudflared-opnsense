@@ -33,22 +33,47 @@ const (
 	r2PackagePrefix = "All/"
 )
 
-// managedBinaryKeyPattern and managedPluginKeyPattern match exactly the two
-// package families this repo publishes under r2PackagePrefix: the binary
-// cloudflared-<ver>.pkg and the plugin os-cloudflared-<ver>_<rev>.pkg. Both
-// forbid a slash in the filename and require a digit-led version, and the
-// plugin requires a numeric revision, so nested paths, foreign products, and
-// arbitrary same-prefix objects never match. Prune only ever deletes keys
-// matching one of these, leaving every other object under the prefix untouched.
-var (
-	managedBinaryKeyPattern = regexp.MustCompile(`^All/cloudflared-[0-9][^/]*\.pkg$`)
-	managedPluginKeyPattern = regexp.MustCompile(`^All/os-cloudflared-[0-9][^/]*_[0-9]+\.pkg$`)
+// Package name prefixes for the two families this repo publishes under
+// r2PackagePrefix: the binary cloudflared-<ver>.pkg and the plugin
+// os-cloudflared-<ver>_<rev>.pkg.
+const (
+	pluginPkgKeyPrefix = "os-cloudflared-"
+	binaryPkgKeyPrefix = "cloudflared-"
 )
+
+// packageFamily classifies an object key as one of this repo's own package
+// files, or familyNone for anything else. Prune only ever deletes keys that
+// classify as a known family, so foreign objects, nested paths, and non-package
+// files under the prefix are always left untouched.
+type packageFamily int
+
+const (
+	familyNone packageFamily = iota
+	familyBinary
+	familyPlugin
+)
+
+func packageFamilyForKey(key string) packageFamily {
+	name, ok := strings.CutPrefix(key, r2PackagePrefix)
+	if !ok || strings.Contains(name, "/") || !strings.HasSuffix(name, ".pkg") {
+		return familyNone
+	}
+	// Check the plugin prefix first: os-cloudflared- is not a binaryPkgKeyPrefix
+	// match, but ordering keeps the intent explicit.
+	switch {
+	case strings.HasPrefix(name, pluginPkgKeyPrefix):
+		return familyPlugin
+	case strings.HasPrefix(name, binaryPkgKeyPrefix):
+		return familyBinary
+	default:
+		return familyNone
+	}
+}
 
 // isManagedPackageKey reports whether key is one of this repo's own package
 // objects that prune is allowed to delete.
 func isManagedPackageKey(key string) bool {
-	return managedBinaryKeyPattern.MatchString(key) || managedPluginKeyPattern.MatchString(key)
+	return packageFamilyForKey(key) != familyNone
 }
 
 var r2AccountIDPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
@@ -171,11 +196,12 @@ func pruneStaleR2Objects(
 	keptBinary := false
 	keptPlugin := false
 	for key := range keep {
-		if managedBinaryKeyPattern.MatchString(key) {
+		switch packageFamilyForKey(key) {
+		case familyBinary:
 			keptBinary = true
-		}
-		if managedPluginKeyPattern.MatchString(key) {
+		case familyPlugin:
 			keptPlugin = true
+		case familyNone:
 		}
 	}
 	if !keptBinary || !keptPlugin {

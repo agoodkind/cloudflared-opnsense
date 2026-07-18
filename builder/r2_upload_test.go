@@ -121,12 +121,10 @@ func TestPruneStaleR2ObjectsDeletesOnlyStale(t *testing.T) {
 			"All/os-cloudflared-2026.7.2_5.pkg",
 			"All/cloudflared-2026.6.0.pkg",
 			"All/os-cloudflared-2026.6.0_1.pkg",
-			// Foreign and malformed objects under the prefix must never be deleted.
-			"All/README.txt",
-			"All/some-other-tool-1.0.pkg",
-			"All/cloudflared-archive/2026.7.2.pkg", // nested path
-			"All/os-cloudflared-frobnicate.pkg",    // no numeric revision
-			"All/cloudflared-.pkg",                 // no digit-led version
+			// Foreign objects under the prefix must never be deleted.
+			"All/README.txt",                       // not a .pkg
+			"All/some-other-tool-1.0.pkg",          // different prefix
+			"All/cloudflared-archive/2026.7.2.pkg", // nested path (contains a slash)
 		},
 	}
 	keep := map[string]struct{}{
@@ -222,32 +220,42 @@ func TestPruneStaleR2ObjectsSkipsWhenKeepMissingOneFamily(t *testing.T) {
 	}
 }
 
-func TestIsManagedPackageKey(t *testing.T) {
+func TestPackageFamilyForKey(t *testing.T) {
 	t.Parallel()
 
-	managed := []string{
+	binaries := []string{
 		"All/cloudflared-2026.7.2.pkg",
 		"All/cloudflared-2026.7.2-beta1.pkg",
-		"All/os-cloudflared-2026.7.2_5.pkg",
-		"All/os-cloudflared-2026.7.2_10.pkg",
 	}
-	for _, key := range managed {
-		if !isManagedPackageKey(key) {
-			t.Errorf("isManagedPackageKey(%q) = false, want true", key)
+	for _, key := range binaries {
+		if got := packageFamilyForKey(key); got != familyBinary {
+			t.Errorf("packageFamilyForKey(%q) = %v, want familyBinary", key, got)
 		}
 	}
 
-	unmanaged := []string{
+	plugins := []string{
+		"All/os-cloudflared-2026.7.2_5.pkg",
+		"All/os-cloudflared-2026.7.2_10.pkg",
+	}
+	for _, key := range plugins {
+		if got := packageFamilyForKey(key); got != familyPlugin {
+			t.Errorf("packageFamilyForKey(%q) = %v, want familyPlugin", key, got)
+		}
+	}
+
+	// Not this repo's packages: wrong prefix, not a .pkg, a nested path, or
+	// missing the All/ prefix entirely.
+	foreign := []string{
 		"All/README.txt",
 		"All/some-other-tool-1.0.pkg",
-		"All/cloudflared-archive/2026.7.2.pkg", // nested path
-		"All/cloudflared-.pkg",                 // no digit-led version
-		"All/os-cloudflared-frobnicate.pkg",    // no numeric revision
-		"All/os-cloudflared-2026.7.2.pkg",      // plugin without revision
-		"cloudflared-2026.7.2.pkg",             // missing prefix
-		"All/sub/cloudflared-2026.7.2.pkg",     // wrong prefix depth
+		"All/cloudflared-archive/2026.7.2.pkg",
+		"cloudflared-2026.7.2.pkg",
+		"All/sub/cloudflared-2026.7.2.pkg",
 	}
-	for _, key := range unmanaged {
+	for _, key := range foreign {
+		if got := packageFamilyForKey(key); got != familyNone {
+			t.Errorf("packageFamilyForKey(%q) = %v, want familyNone", key, got)
+		}
 		if isManagedPackageKey(key) {
 			t.Errorf("isManagedPackageKey(%q) = true, want false", key)
 		}
