@@ -74,6 +74,9 @@ only when a package is new or its installed content changed.
 Each release contains `cloudflared-<version>.pkg` and
 `os-cloudflared-<version>_<revision>.pkg`.
 
+Both packages carry the wildcard ABI `FreeBSD:*:*`, so a single repository installs
+on any OPNsense release regardless of its FreeBSD base.
+
 The publish job requires `CF_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. GitHub
 releases use tags in the form `<cloudflared-version>-freebsd-r<revision>`.
 

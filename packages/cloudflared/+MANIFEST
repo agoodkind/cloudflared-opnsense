@@ -5,6 +5,8 @@ comment: Cloudflare Tunnel client for FreeBSD
 maintainer: github.com/agoodkind
 www: https://github.com/cloudflare/cloudflared
 prefix: /usr/local
+arch: "freebsd:*:*"
+abi: "FreeBSD:*:*"
 licenselogic: "single"
 categories: [net]
 licenses: [Apache-2.0]
