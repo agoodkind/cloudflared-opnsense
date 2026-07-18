@@ -121,9 +121,12 @@ func TestPruneStaleR2ObjectsDeletesOnlyStale(t *testing.T) {
 			"All/os-cloudflared-2026.7.2_5.pkg",
 			"All/cloudflared-2026.6.0.pkg",
 			"All/os-cloudflared-2026.6.0_1.pkg",
-			// Foreign objects under the prefix must never be deleted.
+			// Foreign and malformed objects under the prefix must never be deleted.
 			"All/README.txt",
 			"All/some-other-tool-1.0.pkg",
+			"All/cloudflared-archive/2026.7.2.pkg", // nested path
+			"All/os-cloudflared-frobnicate.pkg",    // no numeric revision
+			"All/cloudflared-.pkg",                 // no digit-led version
 		},
 	}
 	keep := map[string]struct{}{
@@ -160,7 +163,10 @@ func TestPruneStaleR2ObjectsAggregatesDeleteErrors(t *testing.T) {
 		},
 		failOn: map[string]bool{"All/os-cloudflared-2026.6.0_1.pkg": true},
 	}
-	keep := map[string]struct{}{"All/cloudflared-2026.7.2.pkg": {}}
+	keep := map[string]struct{}{
+		"All/cloudflared-2026.7.2.pkg":      {},
+		"All/os-cloudflared-2026.7.2_5.pkg": {},
+	}
 
 	err := pruneStaleR2Objects(context.Background(), pruner, "account123", "bucket-name", keep)
 	if err == nil {
@@ -195,11 +201,67 @@ func TestPruneStaleR2ObjectsSkipsWhenKeepHasNoManagedPackage(t *testing.T) {
 	}
 }
 
+func TestPruneStaleR2ObjectsSkipsWhenKeepMissingOneFamily(t *testing.T) {
+	t.Parallel()
+
+	pruner := &fakeR2Pruner{
+		keys: []string{
+			"All/cloudflared-2026.6.0.pkg",
+			"All/os-cloudflared-2026.6.0_1.pkg",
+		},
+	}
+	// keep names the binary package but no plugin package, so the upload list is
+	// incomplete: prune must not run.
+	keep := map[string]struct{}{"All/cloudflared-2026.7.2.pkg": {}}
+
+	if err := pruneStaleR2Objects(context.Background(), pruner, "account123", "bucket-name", keep); err != nil {
+		t.Fatalf("pruneStaleR2Objects: %v", err)
+	}
+	if len(pruner.deleted) != 0 {
+		t.Fatalf("deleted = %#v, want no deletes when a package family is missing", pruner.deleted)
+	}
+}
+
+func TestIsManagedPackageKey(t *testing.T) {
+	t.Parallel()
+
+	managed := []string{
+		"All/cloudflared-2026.7.2.pkg",
+		"All/cloudflared-2026.7.2-beta1.pkg",
+		"All/os-cloudflared-2026.7.2_5.pkg",
+		"All/os-cloudflared-2026.7.2_10.pkg",
+	}
+	for _, key := range managed {
+		if !isManagedPackageKey(key) {
+			t.Errorf("isManagedPackageKey(%q) = false, want true", key)
+		}
+	}
+
+	unmanaged := []string{
+		"All/README.txt",
+		"All/some-other-tool-1.0.pkg",
+		"All/cloudflared-archive/2026.7.2.pkg", // nested path
+		"All/cloudflared-.pkg",                 // no digit-led version
+		"All/os-cloudflared-frobnicate.pkg",    // no numeric revision
+		"All/os-cloudflared-2026.7.2.pkg",      // plugin without revision
+		"cloudflared-2026.7.2.pkg",             // missing prefix
+		"All/sub/cloudflared-2026.7.2.pkg",     // wrong prefix depth
+	}
+	for _, key := range unmanaged {
+		if isManagedPackageKey(key) {
+			t.Errorf("isManagedPackageKey(%q) = true, want false", key)
+		}
+	}
+}
+
 func TestPruneStaleR2ObjectsReturnsListError(t *testing.T) {
 	t.Parallel()
 
 	pruner := &fakeR2Pruner{listErr: errors.New("list boom")}
-	keep := map[string]struct{}{"All/cloudflared-2026.7.2.pkg": {}}
+	keep := map[string]struct{}{
+		"All/cloudflared-2026.7.2.pkg":      {},
+		"All/os-cloudflared-2026.7.2_5.pkg": {},
+	}
 	err := pruneStaleR2Objects(context.Background(), pruner, "account123", "bucket-name", keep)
 	if err == nil {
 		t.Fatal("pruneStaleR2Objects succeeded despite a list error")

@@ -121,6 +121,12 @@ jobs:
 
   publish:
     needs: [check, build]
+    # Serialize production publishing across all triggers. Two concurrent
+    # publishes could prune each other's freshly uploaded packages, so queue
+    # runs instead of cancelling them.
+    concurrency:
+      group: r2-production-publish
+      cancel-in-progress: false
     if: >-
       needs.build.result == 'success' &&
       github.event_name != 'pull_request'

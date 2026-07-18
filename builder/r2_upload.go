@@ -33,11 +33,23 @@ const (
 	r2PackagePrefix = "All/"
 )
 
-// managedPackageKeyPattern matches only the package families this repo
-// publishes under r2PackagePrefix: cloudflared-<ver>.pkg and
-// os-cloudflared-<ver>_<rev>.pkg. Prune only ever deletes keys matching this
-// pattern, so any other object under the prefix is left untouched.
-var managedPackageKeyPattern = regexp.MustCompile(`^All/(cloudflared|os-cloudflared)-.+\.pkg$`)
+// managedBinaryKeyPattern and managedPluginKeyPattern match exactly the two
+// package families this repo publishes under r2PackagePrefix: the binary
+// cloudflared-<ver>.pkg and the plugin os-cloudflared-<ver>_<rev>.pkg. Both
+// forbid a slash in the filename and require a digit-led version, and the
+// plugin requires a numeric revision, so nested paths, foreign products, and
+// arbitrary same-prefix objects never match. Prune only ever deletes keys
+// matching one of these, leaving every other object under the prefix untouched.
+var (
+	managedBinaryKeyPattern = regexp.MustCompile(`^All/cloudflared-[0-9][^/]*\.pkg$`)
+	managedPluginKeyPattern = regexp.MustCompile(`^All/os-cloudflared-[0-9][^/]*_[0-9]+\.pkg$`)
+)
+
+// isManagedPackageKey reports whether key is one of this repo's own package
+// objects that prune is allowed to delete.
+func isManagedPackageKey(key string) bool {
+	return managedBinaryKeyPattern.MatchString(key) || managedPluginKeyPattern.MatchString(key)
+}
 
 var r2AccountIDPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
@@ -152,17 +164,23 @@ func pruneStaleR2Objects(
 	accountID, bucketName string,
 	keep map[string]struct{},
 ) error {
-	// Guard against a malformed keep-set: if it names no managed package, the
-	// upload list was empty or wrong, so skip pruning rather than risk deleting
-	// the live packages.
-	keptManaged := 0
+	// Guard against a malformed keep-set: prune only when it names both the
+	// binary and plugin package this publish uploaded. A keep-set missing either
+	// family means the upload list was empty or wrong, so skip pruning rather
+	// than risk deleting the live packages.
+	keptBinary := false
+	keptPlugin := false
 	for key := range keep {
-		if managedPackageKeyPattern.MatchString(key) {
-			keptManaged++
+		if managedBinaryKeyPattern.MatchString(key) {
+			keptBinary = true
+		}
+		if managedPluginKeyPattern.MatchString(key) {
+			keptPlugin = true
 		}
 	}
-	if keptManaged == 0 {
-		slog.WarnContext(ctx, "skipping R2 prune: keep-set names no managed package", "keep_size", len(keep))
+	if !keptBinary || !keptPlugin {
+		slog.WarnContext(ctx, "skipping R2 prune: keep-set is missing a package family",
+			"kept_binary", keptBinary, "kept_plugin", keptPlugin, "keep_size", len(keep))
 		return nil
 	}
 
@@ -179,7 +197,7 @@ func pruneStaleR2Objects(
 		}
 		// Only ever delete this repo's own package families. Any other object
 		// under the prefix is left untouched.
-		if !managedPackageKeyPattern.MatchString(key) {
+		if !isManagedPackageKey(key) {
 			continue
 		}
 		if err := pruner.deleteObject(ctx, accountID, bucketName, key); err != nil {
