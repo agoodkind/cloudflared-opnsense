@@ -118,6 +118,22 @@ func Test_parseUCLManifestParsesBinaryTemplate(t *testing.T) {
 	if len(licenses) != 1 || licenses[0] != "Apache-2.0" {
 		t.Fatalf("licenses = %v", licenses)
 	}
+
+	var abi string
+	if err := json.Unmarshal(manifest["abi"], &abi); err != nil {
+		t.Fatalf("abi unmarshal: %v", err)
+	}
+	if abi != "FreeBSD:*:*" {
+		t.Fatalf("abi = %q, want FreeBSD:*:* so the package installs across FreeBSD majors", abi)
+	}
+
+	var arch string
+	if err := json.Unmarshal(manifest["arch"], &arch); err != nil {
+		t.Fatalf("arch unmarshal: %v", err)
+	}
+	if arch != "freebsd:*:*" {
+		t.Fatalf("arch = %q, want lowercase freebsd:*:* to match pkg canonical form", arch)
+	}
 }
 
 func Test_parseUCLManifest(t *testing.T) {

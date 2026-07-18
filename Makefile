@@ -26,6 +26,10 @@ PLUGIN_LICENSE=		BSD2CLAUSE
 PLUGINSDIR=		${.CURDIR}
 PLUGIN_DEPENDS=		cloudflared
 
+# Plugin ships only PHP/shell, so tag it ABI-independent (FreeBSD:*:*) to
+# install across FreeBSD majors instead of the build VM's ABI.
+PLUGIN_NO_ABI=		yes
+
 # Satisfy defaults.mk when php/python are not on PATH (e.g. CI builder VM).
 PLUGIN_PHP?=		82
 PLUGIN_PYTHON?=		311

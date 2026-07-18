@@ -469,12 +469,14 @@ func buildManifestMap(
 		m["scripts"] = jsonRawFromStringMap(scripts)
 	}
 
-	// Detect ABI from the system if not already set.
+	// Fall back to an ABI-independent tag when the manifest does not set one.
+	// cloudflared is a static Go binary, so a wildcard ABI installs on every
+	// FreeBSD major release (OPNsense 26.1 on FreeBSD 14, 26.7 on FreeBSD 15).
 	if _, ok := m["abi"]; !ok {
-		m["abi"] = jsonRawFromString("FreeBSD:14:amd64")
+		m["abi"] = jsonRawFromString("FreeBSD:*:*")
 	}
 	if _, ok := m["arch"]; !ok {
-		m["arch"] = jsonRawFromString("freebsd:14:x86:64")
+		m["arch"] = jsonRawFromString("freebsd:*:*")
 	}
 	return m
 }
