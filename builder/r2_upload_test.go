@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -84,6 +86,127 @@ func (c *recordingR2Client) Delete(
 ) (*r2.BucketObjectDeleteResponse, error) {
 	c.deletes = append(c.deletes, objectKey)
 	return &r2.BucketObjectDeleteResponse{}, nil
+}
+
+// fakeR2Pruner records deletes and lets a test list a fixed set of keys, force a
+// list error, or fail specific deletes.
+type fakeR2Pruner struct {
+	keys    []string
+	listErr error
+	failOn  map[string]bool
+	deleted []string
+}
+
+func (f *fakeR2Pruner) listObjectKeys(_ context.Context, _, _, _ string) ([]string, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.keys, nil
+}
+
+func (f *fakeR2Pruner) deleteObject(_ context.Context, _, _, objectKey string) error {
+	if f.failOn[objectKey] {
+		return fmt.Errorf("delete failed for %s", objectKey)
+	}
+	f.deleted = append(f.deleted, objectKey)
+	return nil
+}
+
+func TestPruneStaleR2ObjectsDeletesOnlyStale(t *testing.T) {
+	t.Parallel()
+
+	pruner := &fakeR2Pruner{
+		keys: []string{
+			"All/cloudflared-2026.7.2.pkg",
+			"All/os-cloudflared-2026.7.2_5.pkg",
+			"All/cloudflared-2026.6.0.pkg",
+			"All/os-cloudflared-2026.6.0_1.pkg",
+			// Foreign objects under the prefix must never be deleted.
+			"All/README.txt",
+			"All/some-other-tool-1.0.pkg",
+		},
+	}
+	keep := map[string]struct{}{
+		"All/cloudflared-2026.7.2.pkg":      {},
+		"All/os-cloudflared-2026.7.2_5.pkg": {},
+	}
+
+	if err := pruneStaleR2Objects(context.Background(), pruner, "account123", "bucket-name", keep); err != nil {
+		t.Fatalf("pruneStaleR2Objects: %v", err)
+	}
+
+	want := []string{
+		"All/cloudflared-2026.6.0.pkg",
+		"All/os-cloudflared-2026.6.0_1.pkg",
+	}
+	if len(pruner.deleted) != len(want) {
+		t.Fatalf("deleted = %#v, want %#v", pruner.deleted, want)
+	}
+	for i := range want {
+		if pruner.deleted[i] != want[i] {
+			t.Fatalf("deleted[%d] = %q, want %q", i, pruner.deleted[i], want[i])
+		}
+	}
+}
+
+func TestPruneStaleR2ObjectsAggregatesDeleteErrors(t *testing.T) {
+	t.Parallel()
+
+	pruner := &fakeR2Pruner{
+		keys: []string{
+			"All/cloudflared-2026.7.2.pkg",
+			"All/os-cloudflared-2026.6.0_1.pkg",
+			"All/cloudflared-2026.6.0.pkg",
+		},
+		failOn: map[string]bool{"All/os-cloudflared-2026.6.0_1.pkg": true},
+	}
+	keep := map[string]struct{}{"All/cloudflared-2026.7.2.pkg": {}}
+
+	err := pruneStaleR2Objects(context.Background(), pruner, "account123", "bucket-name", keep)
+	if err == nil {
+		t.Fatal("pruneStaleR2Objects succeeded despite a failed delete")
+	}
+	if !strings.Contains(err.Error(), "All/os-cloudflared-2026.6.0_1.pkg") {
+		t.Fatalf("error = %v, want it to name the failed key", err)
+	}
+	if len(pruner.deleted) != 1 || pruner.deleted[0] != "All/cloudflared-2026.6.0.pkg" {
+		t.Fatalf("deleted = %#v, want the other stale object still removed", pruner.deleted)
+	}
+}
+
+func TestPruneStaleR2ObjectsSkipsWhenKeepHasNoManagedPackage(t *testing.T) {
+	t.Parallel()
+
+	pruner := &fakeR2Pruner{
+		keys: []string{
+			"All/cloudflared-2026.6.0.pkg",
+			"All/os-cloudflared-2026.6.0_1.pkg",
+		},
+	}
+	// keep contains only metadata keys, no managed package: the upload list was
+	// malformed, so prune must not delete the live packages.
+	keep := map[string]struct{}{"packagesite.pkg": {}, "meta.conf": {}}
+
+	if err := pruneStaleR2Objects(context.Background(), pruner, "account123", "bucket-name", keep); err != nil {
+		t.Fatalf("pruneStaleR2Objects: %v", err)
+	}
+	if len(pruner.deleted) != 0 {
+		t.Fatalf("deleted = %#v, want no deletes when keep names no managed package", pruner.deleted)
+	}
+}
+
+func TestPruneStaleR2ObjectsReturnsListError(t *testing.T) {
+	t.Parallel()
+
+	pruner := &fakeR2Pruner{listErr: errors.New("list boom")}
+	keep := map[string]struct{}{"All/cloudflared-2026.7.2.pkg": {}}
+	err := pruneStaleR2Objects(context.Background(), pruner, "account123", "bucket-name", keep)
+	if err == nil {
+		t.Fatal("pruneStaleR2Objects succeeded despite a list error")
+	}
+	if len(pruner.deleted) != 0 {
+		t.Fatalf("deleted = %#v, want no deletes when listing fails", pruner.deleted)
+	}
 }
 
 func TestPrefixedUploadsPrependsPrefix(t *testing.T) {

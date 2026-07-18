@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -25,7 +26,18 @@ const (
 
 	// The R2 control-plane object upload endpoint rejects objects over 300 MB.
 	maxR2ControlPlaneUploadBytes = 300 << 20
+
+	// r2PackagePrefix is the bucket key prefix that holds package files. Only
+	// this prefix accumulates superseded objects, since metadata keys are fixed
+	// names overwritten on every publish.
+	r2PackagePrefix = "All/"
 )
+
+// managedPackageKeyPattern matches only the package families this repo
+// publishes under r2PackagePrefix: cloudflared-<ver>.pkg and
+// os-cloudflared-<ver>_<rev>.pkg. Prune only ever deletes keys matching this
+// pattern, so any other object under the prefix is left untouched.
+var managedPackageKeyPattern = regexp.MustCompile(`^All/(cloudflared|os-cloudflared)-.+\.pkg$`)
 
 var r2AccountIDPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
@@ -66,7 +78,123 @@ func uploadToR2(pkgFiles []string, metadataDir string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), r2UploadTimeout)
 	defer cancel()
 
-	return uploadR2Objects(ctx, client.R2.Buckets.Objects, accountID, r2Bucket, uploads)
+	if err := uploadR2Objects(ctx, client.R2.Buckets.Objects, accountID, r2Bucket, uploads); err != nil {
+		return err
+	}
+
+	// Remove superseded package objects the current publish did not upload. The
+	// uploaded keys are exactly the current live set, so anything else under the
+	// package prefix is stale. Cleanup is best-effort: a prune failure is logged
+	// but does not fail the publish, since the release is cut right after this.
+	keep := make(map[string]struct{}, len(uploads))
+	for _, upload := range uploads {
+		keep[upload.objectKey] = struct{}{}
+	}
+	pruner := sdkR2ObjectPruner{objects: client.R2.Buckets.Objects}
+	if err := pruneStaleR2Objects(ctx, pruner, accountID, r2Bucket, keep); err != nil {
+		slog.WarnContext(ctx, "R2 prune completed with errors; stale objects may remain", "err", err)
+	}
+	return nil
+}
+
+// r2ObjectPruner lists and deletes bucket objects so a publish can remove
+// superseded package files.
+type r2ObjectPruner interface {
+	listObjectKeys(ctx context.Context, accountID, bucketName, prefix string) ([]string, error)
+	deleteObject(ctx context.Context, accountID, bucketName, objectKey string) error
+}
+
+// sdkR2ObjectPruner adapts the Cloudflare SDK object service to r2ObjectPruner,
+// so the prune logic can be unit tested against a fake.
+type sdkR2ObjectPruner struct {
+	objects *r2.BucketObjectService
+}
+
+func (p sdkR2ObjectPruner) listObjectKeys(
+	ctx context.Context,
+	accountID, bucketName, prefix string,
+) ([]string, error) {
+	iter := p.objects.ListAutoPaging(ctx, bucketName, r2.BucketObjectListParams{
+		AccountID: cloudflare.F(accountID),
+		Prefix:    cloudflare.F(prefix),
+	})
+	keys := make([]string, 0)
+	for iter.Next() {
+		keys = append(keys, iter.Current().Key)
+	}
+	if err := iter.Err(); err != nil {
+		slog.ErrorContext(ctx, "list R2 objects failed", "err", err, "prefix", prefix)
+		return nil, fmt.Errorf("list R2 objects under %q: %w", prefix, err)
+	}
+	return keys, nil
+}
+
+func (p sdkR2ObjectPruner) deleteObject(
+	ctx context.Context,
+	accountID, bucketName, objectKey string,
+) error {
+	_, err := p.objects.Delete(ctx, bucketName, objectKey, r2.BucketObjectDeleteParams{
+		AccountID: cloudflare.F(accountID),
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "delete R2 object failed", "err", err, "key", objectKey)
+		return fmt.Errorf("delete R2 object %q: %w", objectKey, err)
+	}
+	return nil
+}
+
+// pruneStaleR2Objects deletes every object under the package prefix whose key is
+// not in keep. It attempts every deletion and joins delete failures into the
+// returned error, so one failure does not abort the rest.
+func pruneStaleR2Objects(
+	ctx context.Context,
+	pruner r2ObjectPruner,
+	accountID, bucketName string,
+	keep map[string]struct{},
+) error {
+	// Guard against a malformed keep-set: if it names no managed package, the
+	// upload list was empty or wrong, so skip pruning rather than risk deleting
+	// the live packages.
+	keptManaged := 0
+	for key := range keep {
+		if managedPackageKeyPattern.MatchString(key) {
+			keptManaged++
+		}
+	}
+	if keptManaged == 0 {
+		slog.WarnContext(ctx, "skipping R2 prune: keep-set names no managed package", "keep_size", len(keep))
+		return nil
+	}
+
+	keys, err := pruner.listObjectKeys(ctx, accountID, bucketName, r2PackagePrefix)
+	if err != nil {
+		return err
+	}
+
+	deleted := 0
+	var deleteErrors []error
+	for _, key := range keys {
+		if _, ok := keep[key]; ok {
+			continue
+		}
+		// Only ever delete this repo's own package families. Any other object
+		// under the prefix is left untouched.
+		if !managedPackageKeyPattern.MatchString(key) {
+			continue
+		}
+		if err := pruner.deleteObject(ctx, accountID, bucketName, key); err != nil {
+			// deleteObject already logged the failure; aggregate and continue.
+			deleteErrors = append(deleteErrors, err)
+			continue
+		}
+		deleted++
+	}
+
+	logf(fmt.Sprintf("R2 prune: removed %d stale object(s) under %q", deleted, r2PackagePrefix))
+	if len(deleteErrors) > 0 {
+		return errors.Join(deleteErrors...)
+	}
+	return nil
 }
 
 func requiredR2AccountID() (string, error) {
