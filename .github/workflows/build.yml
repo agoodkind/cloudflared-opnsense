@@ -18,7 +18,7 @@ jobs:
       version: ${{ steps.check.outputs.version }}
       revision: ${{ steps.check.outputs.revision }}
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-go@v7
         with:
@@ -35,7 +35,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-go@v7
         with:
@@ -71,7 +71,7 @@ jobs:
     needs: [check, test, builder]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Build in FreeBSD VM
         uses: vmactions/freebsd-vm@v1.5.2
@@ -132,7 +132,7 @@ jobs:
       VERSION: ${{ needs.check.outputs.version }}
       REVISION: ${{ needs.check.outputs.revision }}
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           token: ${{ github.token }}
           fetch-depth: 0
@@ -190,7 +190,7 @@ jobs:
       VERSION: ${{ needs.check.outputs.version }}
       REVISION: ${{ needs.check.outputs.revision }}
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           token: ${{ github.token }}
           fetch-depth: 0
