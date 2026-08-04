@@ -6,7 +6,7 @@
 //
 //	check    Report latest GitHub version vs last-built version and exit 0
 //	         if a build is needed, 1 if already up-to-date.
-//	build    Clone cloudflared at <version>, apply FreeBSD patches, compile.
+//	build    Clone cloudflared at <version>, apply declared patches, compile.
 //	package  Create pkg(8) packages for the binary and the OPNsense plugin.
 //	repo     Re-generate the pkg repository index (packagesite.*).
 //	publish  Commit updated metadata and push; optionally create GitHub release.
@@ -155,10 +155,15 @@ func autoRepoDir() string {
 	if err != nil {
 		return "."
 	}
-	// Walk up from the binary to find the repo root (contains go.mod).
-	dir := filepath.Dir(exe)
+	return findRepoDir(filepath.Dir(exe))
+}
+
+func findRepoDir(startDir string) string {
+	dir := startDir
 	for range 6 {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+		_, rootModuleErr := os.Stat(filepath.Join(dir, "go.mod"))
+		_, builderModuleErr := os.Stat(filepath.Join(dir, "builder", "go.mod"))
+		if rootModuleErr == nil && builderModuleErr == nil {
 			return dir
 		}
 		dir = filepath.Dir(dir)
@@ -245,7 +250,7 @@ func cmdBuild(cfg *config) error {
 	if err != nil {
 		return err
 	}
-	return buildCloudflared(v)
+	return buildCloudflared(v, cfg.repoDir)
 }
 
 func cmdPackage(cfg *config) error {
@@ -355,7 +360,7 @@ func cmdRun(cfg *config) error {
 
 	logf(fmt.Sprintf("building cloudflared %s revision %d", v, rev))
 
-	if err := buildCloudflared(v); err != nil {
+	if err := buildCloudflared(v, cfg.repoDir); err != nil {
 		return err
 	}
 	if err := createBinaryPackage(v, cfg.repoDir); err != nil {
