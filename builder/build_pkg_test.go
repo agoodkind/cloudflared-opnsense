@@ -227,3 +227,141 @@ func enableFreeBSDDiagnosticsOnHost(t *testing.T, sourceDir string) {
 		}
 	}
 }
+
+func TestPatchManifestSelectsTokenPatchAtSupportedVersions(t *testing.T) {
+	projectRoot, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatalf("resolve project root: %v", err)
+	}
+	manifest, err := loadPatchManifest(filepath.Join(projectRoot, "builder", "patches.toml"))
+	if err != nil {
+		t.Fatalf("loadPatchManifest() error = %v", err)
+	}
+
+	tests := []struct {
+		version string
+		wantIDs []string
+	}{
+		{version: "2026.7.2", wantIDs: []string{"freebsd-diagnostics"}},
+		{version: "2026.7.3", wantIDs: []string{"freebsd-diagnostics", "freebsd-token-file"}},
+		{version: "2026.8.0", wantIDs: []string{"freebsd-diagnostics", "freebsd-token-file"}},
+	}
+	for _, test := range tests {
+		t.Run(test.version, func(t *testing.T) {
+			patches, err := selectPatches(manifest, test.version)
+			if err != nil {
+				t.Fatalf("selectPatches() error = %v", err)
+			}
+			if len(patches) != len(test.wantIDs) {
+				t.Fatalf("selectPatches() returned %d patches, want %d", len(patches), len(test.wantIDs))
+			}
+			for i, wantID := range test.wantIDs {
+				if patches[i].ID != wantID {
+					t.Fatalf("selectPatches()[%d].ID = %q, want %q", i, patches[i].ID, wantID)
+				}
+			}
+		})
+	}
+}
+
+func TestTokenFilePatchCompilesFreeBSDFixtureAndSkipsWhenAlreadyApplied(t *testing.T) {
+	sourceDir := createTokenFileFixture(t)
+	remoteDir, expectedCommit := createTokenFilePatchRemote(t, sourceDir)
+	repoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoDir, "builder"), 0o755); err != nil {
+		t.Fatalf("create builder directory: %v", err)
+	}
+	writeManifestAt(t, repoDir, fmt.Sprintf(`schema_version = 1
+
+[[patches]]
+id = "freebsd-token-file"
+[patches.git]
+remote = %q
+ref = "refs/heads/freebsd-token-file"
+expected_commit = %q
+`, remoteDir, expectedCommit))
+
+	if err := applyPatchManifest(repoDir, sourceDir, "2026.7.3"); err != nil {
+		t.Fatalf("applyPatchManifest() first run: %v", err)
+	}
+	if err := applyPatchManifest(repoDir, sourceDir, "2026.7.3"); err != nil {
+		t.Fatalf("applyPatchManifest() second run: %v", err)
+	}
+
+	testBinary := filepath.Join(t.TempDir(), "cloudflared.test")
+	command := exec.CommandContext(t.Context(), "go", "test", "-c", "-o", testBinary, "./cmd/cloudflared")
+	command.Dir = sourceDir
+	command.Env = append(os.Environ(), "CGO_ENABLED=0", "GOARCH=amd64", "GOOS=freebsd")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("compile token fixture for FreeBSD: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(testBinary); err != nil {
+		t.Fatalf("stat compiled FreeBSD test binary: %v", err)
+	}
+}
+
+func createTokenFileFixture(t *testing.T) string {
+	t.Helper()
+
+	sourceDir := t.TempDir()
+	files := map[string]string{
+		"go.mod": "module github.com/cloudflare/cloudflared\n\ngo 1.26.5\n",
+		filepath.Join("cmd", "cloudflared", "common_service.go"): `package main
+
+func createTokenFileUnix(string) error { return nil }
+func writeTokenToFile(path string) error { return createTokenFile(path) }
+`,
+		filepath.Join("cmd", "cloudflared", "generic_service.go"): `//go:build !windows && !darwin && !linux
+
+package main
+
+func main() { _ = writeTokenToFile("token") }
+`,
+		filepath.Join("cmd", "cloudflared", "main_test.go"): `package main
+
+import "testing"
+
+func TestFixture(*testing.T) {}
+`,
+	}
+	for relativePath, content := range files {
+		path := filepath.Join(sourceDir, relativePath)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create parent directory for %s: %v", relativePath, err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", relativePath, err)
+		}
+	}
+	runGit(t, sourceDir, "init", "--initial-branch=patch-tests")
+	runGit(t, sourceDir, "config", "user.email", "alex@goodkind.io")
+	runGit(t, sourceDir, "config", "user.name", "Alexander Goodkind")
+	runGit(t, sourceDir, "add", ".")
+	runGit(t, sourceDir, "commit", "-m", "add token fixture")
+	return sourceDir
+}
+
+func createTokenFilePatchRemote(t *testing.T, sourceDir string) (string, string) {
+	t.Helper()
+
+	remoteDir := filepath.Join(t.TempDir(), "cloudflared.git")
+	runGit(t, filepath.Dir(remoteDir), "init", "--bare", "--initial-branch=main", remoteDir)
+	runGit(t, sourceDir, "remote", "add", "origin", remoteDir)
+	runGit(t, sourceDir, "push", "origin", "patch-tests:refs/heads/main")
+
+	upstreamDir := filepath.Join(t.TempDir(), "upstream")
+	runGit(t, filepath.Dir(upstreamDir), "clone", remoteDir, upstreamDir)
+	runGit(t, upstreamDir, "config", "user.email", "alex@goodkind.io")
+	runGit(t, upstreamDir, "config", "user.name", "Alexander Goodkind")
+	runGit(t, upstreamDir, "checkout", "-b", "freebsd-token-file")
+	servicePath := filepath.Join(upstreamDir, "cmd", "cloudflared", "freebsd_service.go")
+	service := "//go:build freebsd\n\npackage main\n\nvar createTokenFile = createTokenFileUnix\n"
+	if err := os.WriteFile(servicePath, []byte(service), 0o600); err != nil {
+		t.Fatalf("write FreeBSD service: %v", err)
+	}
+	runGit(t, upstreamDir, "add", "cmd/cloudflared/freebsd_service.go")
+	runGit(t, upstreamDir, "commit", "-m", "add FreeBSD token binding")
+	expectedCommit := strings.TrimSpace(runGit(t, upstreamDir, "rev-parse", "HEAD"))
+	runGit(t, upstreamDir, "push", "origin", "HEAD:refs/heads/freebsd-token-file")
+	return remoteDir, expectedCommit
+}
