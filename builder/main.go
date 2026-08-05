@@ -286,6 +286,9 @@ func cmdPublish(cfg *config) error {
 	if err != nil {
 		return err
 	}
+	if cfg.preview {
+		return previewPublish(v, rev, cfg)
+	}
 
 	decision, err := decidePublish(v, rev, cfg.repoDir)
 	if err != nil {
@@ -300,9 +303,6 @@ func cmdPublish(cfg *config) error {
 
 	if cfg.checkOnly {
 		return nil
-	}
-	if cfg.preview {
-		return previewPublish(v, rev, cfg, decision)
 	}
 	if !decision.shouldPublish {
 		logf("skipping publish: " + decision.reason)

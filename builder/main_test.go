@@ -549,6 +549,28 @@ func Test_validatePublishFlags(t *testing.T) {
 	})
 }
 
+func TestCmdPublishPreviewBypassesProductionDecision(t *testing.T) {
+	originalPkgRepoDir := pkgRepoDir
+	pkgRepoDir = t.TempDir()
+	t.Cleanup(func() {
+		pkgRepoDir = originalPkgRepoDir
+	})
+	t.Setenv(cloudflareAccountIDEnv, "")
+
+	err := cmdPublish(&config{
+		version:  "2026.8.0",
+		revision: 1,
+		repoDir:  t.TempDir(),
+		preview:  true,
+	})
+	if err == nil {
+		t.Fatal("cmdPublish preview returned nil error")
+	}
+	if err.Error() != "CF_ACCOUNT_ID is missing or malformed" {
+		t.Fatalf("cmdPublish preview error = %q, want %q", err, "CF_ACCOUNT_ID is missing or malformed")
+	}
+}
+
 func Test_saveState(t *testing.T) {
 	t.Run("writes version and revision to separate files", func(t *testing.T) {
 		dir := t.TempDir()
