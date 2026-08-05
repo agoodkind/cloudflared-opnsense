@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -14,6 +15,8 @@ import (
 )
 
 const patchManifestSchemaVersion = 1
+
+var expectedCommitPattern = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
 type patchManifest struct {
 	SchemaVersion int         `toml:"schema_version"`
@@ -169,7 +172,20 @@ func validatePatchSource(patch patchSpec) error {
 		return fmt.Errorf("patch %q must declare exactly one source", patch.ID)
 	}
 	if hasGit {
-		return fmt.Errorf("patch %q uses an unsupported git source", patch.ID)
+		if patch.Git.Remote == "" || strings.HasPrefix(patch.Git.Remote, "-") {
+			return fmt.Errorf("patch %q git remote %q is invalid", patch.ID, patch.Git.Remote)
+		}
+		if !validGitRef(patch.Git.Ref) {
+			return fmt.Errorf("patch %q git ref %q is invalid", patch.ID, patch.Git.Ref)
+		}
+		if !expectedCommitPattern.MatchString(patch.Git.ExpectedCommit) {
+			return fmt.Errorf(
+				"patch %q git expected_commit %q must be a full commit SHA",
+				patch.ID,
+				patch.Git.ExpectedCommit,
+			)
+		}
+		return nil
 	}
 	if hasFile {
 		if !safeRelativePath(patch.File) {
@@ -178,6 +194,24 @@ func validatePatchSource(patch patchSpec) error {
 		return nil
 	}
 	return fmt.Errorf("patch %q has no supported source", patch.ID)
+}
+
+func validGitRef(ref string) bool {
+	if !strings.HasPrefix(ref, "refs/") || strings.HasSuffix(ref, "/") || strings.HasSuffix(ref, ".") {
+		return false
+	}
+	if strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "//") {
+		return false
+	}
+	if strings.ContainsAny(ref, " ~^:?*[\\") {
+		return false
+	}
+	for _, character := range ref {
+		if character < 0x20 || character == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func safeRelativePath(path string) bool {
@@ -200,20 +234,115 @@ func applyPatchManifest(repoDir string, sourceDir string, upstreamVersion string
 	}
 
 	for _, patch := range patches {
-		if patch.Git != nil {
-			return fmt.Errorf("patch %q uses an unsupported git source", patch.ID)
-		}
-		patchPath, err := resolveLocalPatchPath(manifestPath, patch)
+		patchPath, cleanup, err := materializePatchPath(manifestPath, sourceDir, patch)
 		if err != nil {
 			return err
 		}
 		disposition, err := applyPatchFile(sourceDir, patch, patchPath)
+		cleanup()
 		if err != nil {
 			return err
 		}
 		logf(fmt.Sprintf("patch %s: %s", patch.ID, disposition))
 	}
 	return nil
+}
+
+func materializePatchPath(manifestPath string, sourceDir string, spec patchSpec) (string, func(), error) {
+	if spec.Git != nil {
+		patchPath, cleanup, err := materializeGitPatch(sourceDir, spec)
+		if err != nil {
+			cleanup()
+			return "", func() {}, err
+		}
+		return patchPath, cleanup, nil
+	}
+
+	patchPath, err := resolveLocalPatchPath(manifestPath, spec)
+	if err != nil {
+		return "", func() {}, err
+	}
+	return patchPath, func() {}, nil
+}
+
+func materializeGitPatch(sourceDir string, spec patchSpec) (string, func(), error) {
+	cleanup := func() {}
+	if spec.Git == nil {
+		return "", cleanup, fmt.Errorf("patch %q has no git source", spec.ID)
+	}
+
+	fetchOutput, err := runPatchGit(
+		sourceDir,
+		"fetch",
+		"--no-tags",
+		"--depth=2",
+		"--",
+		spec.Git.Remote,
+		spec.Git.Ref,
+	)
+	if err != nil {
+		return "", cleanup, fmt.Errorf(
+			"fetch patch %q ref %q: %w\nfetch output:\n%s",
+			spec.ID,
+			spec.Git.Ref,
+			err,
+			fetchOutput,
+		)
+	}
+
+	fetchedOutput, err := runPatchGitOutput(sourceDir, "rev-parse", "--verify", "FETCH_HEAD^{commit}")
+	if err != nil {
+		return "", cleanup, fmt.Errorf("resolve fetched patch %q commit: %w", spec.ID, err)
+	}
+	fetchedCommit := strings.TrimSpace(fetchedOutput)
+	expectedCommit := strings.ToLower(spec.Git.ExpectedCommit)
+	if fetchedCommit != expectedCommit {
+		return "", cleanup, fmt.Errorf(
+			"patch %q ref %q moved: expected commit %s, fetched %s",
+			spec.ID,
+			spec.Git.Ref,
+			expectedCommit,
+			fetchedCommit,
+		)
+	}
+
+	parentsOutput, err := runPatchGitOutput(sourceDir, "show", "-s", "--format=%P", fetchedCommit)
+	if err != nil {
+		return "", cleanup, fmt.Errorf("read patch %q parents: %w", spec.ID, err)
+	}
+	parents := strings.Fields(parentsOutput)
+	if len(parents) != 1 {
+		if len(parents) > 1 {
+			return "", cleanup, fmt.Errorf("patch %q commit %s is a merge commit", spec.ID, fetchedCommit)
+		}
+		return "", cleanup, fmt.Errorf("patch %q commit %s has no parent", spec.ID, fetchedCommit)
+	}
+
+	patchFile, err := os.CreateTemp("", "cloudflared-upstream-patch-*.patch")
+	if err != nil {
+		return "", cleanup, fmt.Errorf("create temporary patch for %q: %w", spec.ID, err)
+	}
+	patchPath := patchFile.Name()
+	cleanup = func() {
+		if err := os.Remove(patchPath); err != nil && !os.IsNotExist(err) {
+			slog.Warn("remove temporary patch failed", "err", err, "id", spec.ID, "path", patchPath)
+		}
+	}
+	if err := patchFile.Close(); err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("close temporary patch for %q: %w", spec.ID, err)
+	}
+
+	patchData, err := runPatchGitOutput(sourceDir, "diff", "--binary", fetchedCommit+"^", fetchedCommit)
+	if err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("export patch %q: %w", spec.ID, err)
+	}
+	if err := os.WriteFile(patchPath, []byte(patchData), 0o600); err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("write temporary patch for %q: %w", spec.ID, err)
+	}
+	return patchPath, cleanup, nil
 }
 
 func resolveLocalPatchPath(manifestPath string, patch patchSpec) (string, error) {
@@ -276,4 +405,19 @@ func runPatchGit(sourceDir string, args ...string) (string, error) {
 		return string(output), commandError
 	}
 	return string(output), nil
+}
+
+func runPatchGitOutput(sourceDir string, args ...string) (string, error) {
+	commandArgs := append([]string{"-C", sourceDir}, args...)
+	command := exec.CommandContext(context.Background(), "git", commandArgs...)
+	stdout := &strings.Builder{}
+	stderr := &strings.Builder{}
+	command.Stdout = stdout
+	command.Stderr = stderr
+	if err := command.Run(); err != nil {
+		commandError := fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, stderr.String())
+		slog.Warn("patch git command failed", "err", commandError, "source_dir", sourceDir)
+		return stdout.String(), commandError
+	}
+	return stdout.String(), nil
 }
