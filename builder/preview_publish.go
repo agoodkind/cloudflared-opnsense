@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"path/filepath"
 	"strconv"
 )
@@ -15,16 +14,8 @@ const defaultPreviewPrefix = "previews/local"
 // verifies each object is readable, then deletes them. It never creates a
 // GitHub release or saves build state, so it is safe to run on every PR and it
 // catches a broken publish (for example a missing or invalid R2 token) before
-// the change merges. The production decision is logged for context but does not
-// gate the round-trip, so a publish-path regression is caught even when the
-// built content matches the latest release.
-func previewPublish(version string, revision int, cfg *config, decision publishDecision) error {
-	logf(fmt.Sprintf(
-		"preview publish: production decision would be %v (%s)",
-		decision.shouldPublish,
-		decision.reason,
-	))
-
+// the change merges.
+func previewPublish(version string, revision int, cfg *config) error {
 	pkgVersion := version + "_" + strconv.Itoa(revision)
 	pkgFiles := []string{
 		filepath.Join(pkgRepoDir, "All", "cloudflared-"+version+".pkg"),
