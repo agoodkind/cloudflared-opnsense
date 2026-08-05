@@ -3,9 +3,11 @@ module goodkind.io/cloudflared-builder
 go 1.26.5
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/cloudflare/cloudflare-go/v7 v7.6.0
 	github.com/klauspost/compress v1.18.6
 	github.com/nahanni/go-ucl v0.0.0-20161122070711-3788fcf0dad8
+	github.com/pelletier/go-toml/v2 v2.2.4
 )
 
 require (

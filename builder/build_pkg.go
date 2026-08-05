@@ -25,7 +25,7 @@ import (
 
 // ---- build -----------------------------------------------------------------
 
-func buildCloudflared(version string) error {
+func buildCloudflared(version string, repoDir string) error {
 	logf("cloning cloudflared " + version)
 
 	// version reaches git clone via runCmd below; reject anything that is not a
@@ -57,6 +57,10 @@ func buildCloudflared(version string) error {
 	logf("applying FreeBSD patches")
 	if err := patchFreeBSD(srcDir); err != nil {
 		return fmt.Errorf("patch: %w", err)
+	}
+	logf("applying declared patches")
+	if err := applyPatchManifest(repoDir, srcDir, version); err != nil {
+		return fmt.Errorf("apply patch manifest: %w", err)
 	}
 
 	buildDate, err := cloudflaredBuildDate(srcDir)

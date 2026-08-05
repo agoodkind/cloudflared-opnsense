@@ -1,0 +1,7 @@
+schema_version = 1
+
+[[patches]]
+id = "freebsd-token-file"
+file = "patches/freebsd-token-file.patch"
+applies_to = ">=2026.7.3"
+strip = 1

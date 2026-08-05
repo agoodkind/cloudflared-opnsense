@@ -1,0 +1,11 @@
+diff --git a/cmd/cloudflared/freebsd_service.go b/cmd/cloudflared/freebsd_service.go
+new file mode 100644
+index 0000000..891da61
+--- /dev/null
++++ b/cmd/cloudflared/freebsd_service.go
+@@ -0,0 +1,5 @@
++//go:build freebsd
++
++package main
++
++var createTokenFile = createTokenFileUnix
