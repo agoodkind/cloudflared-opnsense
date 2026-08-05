@@ -1,0 +1,289 @@
+diff --git a/diagnostic/network/collector_unix.go b/diagnostic/network/collector_unix.go
+index 2db2d26..94bfaa1 100644
+--- a/diagnostic/network/collector_unix.go
++++ b/diagnostic/network/collector_unix.go
+@@ -1,3 +1,3 @@
+-//go:build darwin || linux
+-
++//go:build darwin || linux || freebsd
++
+ package diagnostic
+diff --git a/diagnostic/network/collector_unix_test.go b/diagnostic/network/collector_unix_test.go
+index 5ec231a..5d52c59 100644
+--- a/diagnostic/network/collector_unix_test.go
++++ b/diagnostic/network/collector_unix_test.go
+@@ -1,3 +1,3 @@
+-//go:build darwin || linux
+-
++//go:build darwin || linux || freebsd
++
+ package diagnostic_test
+diff --git a/diagnostic/system_collector_freebsd.go b/diagnostic/system_collector_freebsd.go
+new file mode 100644
+index 0000000..ae93e89
+--- /dev/null
++++ b/diagnostic/system_collector_freebsd.go
+@@ -0,0 +1,184 @@
++//go:build freebsd
++
++package diagnostic
++
++import (
++	"context"
++	"fmt"
++	"os/exec"
++	"runtime"
++	"strconv"
++	"strings"
++)
++
++type SystemCollectorImpl struct {
++	version string
++}
++
++func NewSystemCollectorImpl(
++	version string,
++) *SystemCollectorImpl {
++	return &SystemCollectorImpl{
++		version,
++	}
++}
++
++func (collector *SystemCollectorImpl) Collect(ctx context.Context) (*SystemInformation, error) {
++	memoryInfo, memoryInfoRaw, memoryInfoErr := collectMemoryInformation(ctx)
++	fdInfo, fdInfoRaw, fdInfoErr := collectFileDescriptorInformation(ctx)
++	disks, disksRaw, diskErr := collectDiskVolumeInformationUnix(ctx)
++	osInfo, osInfoRaw, osInfoErr := collectOSInformationUnix(ctx)
++
++	var memoryMaximum, memoryCurrent, fileDescriptorMaximum, fileDescriptorCurrent uint64
++	var osSystem, name, osVersion, osRelease, architecture string
++	gerror := SystemInformationGeneralError{}
++
++	if memoryInfoErr != nil {
++		gerror.MemoryInformationError = SystemInformationError{
++			Err:     memoryInfoErr,
++			RawInfo: memoryInfoRaw,
++		}
++	} else {
++		memoryMaximum = memoryInfo.MemoryMaximum
++		memoryCurrent = memoryInfo.MemoryCurrent
++	}
++
++	if fdInfoErr != nil {
++		gerror.FileDescriptorsInformationError = SystemInformationError{
++			Err:     fdInfoErr,
++			RawInfo: fdInfoRaw,
++		}
++	} else {
++		fileDescriptorMaximum = fdInfo.FileDescriptorMaximum
++		fileDescriptorCurrent = fdInfo.FileDescriptorCurrent
++	}
++
++	if diskErr != nil {
++		gerror.DiskVolumeInformationError = SystemInformationError{
++			Err:     diskErr,
++			RawInfo: disksRaw,
++		}
++	}
++
++	if osInfoErr != nil {
++		gerror.OperatingSystemInformationError = SystemInformationError{
++			Err:     osInfoErr,
++			RawInfo: osInfoRaw,
++		}
++	} else {
++		osSystem = osInfo.OsSystem
++		name = osInfo.Name
++		osVersion = osInfo.OsVersion
++		osRelease = osInfo.OsRelease
++		architecture = osInfo.Architecture
++	}
++
++	cloudflaredVersion := collector.version
++	info := NewSystemInformation(
++		memoryMaximum,
++		memoryCurrent,
++		fileDescriptorMaximum,
++		fileDescriptorCurrent,
++		osSystem,
++		name,
++		osVersion,
++		osRelease,
++		architecture,
++		cloudflaredVersion,
++		runtime.Version(),
++		runtime.GOARCH,
++		disks,
++	)
++
++	if memoryInfoErr != nil ||
++		fdInfoErr != nil ||
++		diskErr != nil ||
++		osInfoErr != nil {
++		return info, gerror
++	}
++	return info, nil
++}
++
++func collectMemoryInformation(ctx context.Context) (*MemoryInformation, string, error) {
++	// Use sysctl to get memory information on FreeBSD
++	command := exec.CommandContext(ctx, "sysctl", "-n", "hw.physmem", "vm.stats.vm.v_free_count", "hw.pagesize")
++
++	outputBytes, err := command.CombinedOutput()
++	if err != nil {
++		return nil, string(outputBytes), fmt.Errorf("error retrieving output from command '%s': %w", command.String(), err)
++	}
++
++	output := string(outputBytes)
++	lines := strings.Split(strings.TrimSpace(output), "\n")
++
++	if len(lines) < 3 {
++		return nil, output, fmt.Errorf("unexpected sysctl output format")
++	}
++
++	physmem, err := strconv.ParseUint(lines[0], 10, 64)
++	if err != nil {
++		return nil, output, fmt.Errorf("error parsing physmem: %w", err)
++	}
++
++	freePages, err := strconv.ParseUint(lines[1], 10, 64)
++	if err != nil {
++		return nil, output, fmt.Errorf("error parsing free pages: %w", err)
++	}
++
++	pageSize, err := strconv.ParseUint(lines[2], 10, 64)
++	if err != nil {
++		return nil, output, fmt.Errorf("error parsing page size: %w", err)
++	}
++	if pageSize == 0 || freePages > ^uint64(0)/pageSize {
++		return nil, output, fmt.Errorf("invalid free memory values")
++	}
++
++	freeMemory := freePages * pageSize
++	if freeMemory > physmem {
++		return nil, output, fmt.Errorf("free memory exceeds physical memory")
++	}
++
++	memoryMaximum := physmem / 1024
++	memoryCurrent := (physmem - freeMemory) / 1024
++
++	memoryInfo := &MemoryInformation{
++		MemoryMaximum: memoryMaximum,
++		MemoryCurrent: memoryCurrent,
++	}
++
++	return memoryInfo, output, nil
++}
++
++func collectFileDescriptorInformation(ctx context.Context) (*FileDescriptorInformation, string, error) {
++	// Use sysctl to get file descriptor limits on FreeBSD
++	command := exec.CommandContext(ctx, "sysctl", "-n", "kern.maxfiles", "kern.openfiles")
++
++	outputBytes, err := command.CombinedOutput()
++	if err != nil {
++		return nil, string(outputBytes), fmt.Errorf("error retrieving output from command '%s': %w", command.String(), err)
++	}
++
++	output := string(outputBytes)
++	lines := strings.Split(strings.TrimSpace(output), "\n")
++
++	if len(lines) < 2 {
++		return nil, output, fmt.Errorf("unexpected sysctl output format")
++	}
++
++	maxFiles, err := strconv.ParseUint(lines[0], 10, 64)
++	if err != nil {
++		return nil, output, fmt.Errorf("error parsing maxfiles: %w", err)
++	}
++
++	openFiles, err := strconv.ParseUint(lines[1], 10, 64)
++	if err != nil {
++		return nil, output, fmt.Errorf("error parsing openfiles: %w", err)
++	}
++
++	fdInfo := &FileDescriptorInformation{
++		FileDescriptorMaximum: maxFiles,
++		FileDescriptorCurrent: openFiles,
++	}
++
++	return fdInfo, output, nil
++}
+diff --git a/diagnostic/system_collector_freebsd_test.go b/diagnostic/system_collector_freebsd_test.go
+new file mode 100644
+index 0000000..9d0b4c7
+--- /dev/null
++++ b/diagnostic/system_collector_freebsd_test.go
+@@ -0,0 +1,73 @@
++//go:build freebsd
++
++package diagnostic
++
++import (
++	"context"
++	"os"
++	"path/filepath"
++	"testing"
++)
++
++func TestFreeBSDSystemCollectorReportsUsedMemoryAndOpenFiles(t *testing.T) {
++	sysctlDir := t.TempDir()
++	sysctlPath := filepath.Join(sysctlDir, "sysctl")
++	const sysctlScript = `#!/bin/sh
++case "$2" in
++hw.physmem)
++	printf '1024000\n100\n4096\n'
++	;;
++kern.maxfiles)
++	printf '2000\n50\n'
++	;;
++*)
++	exit 1
++	;;
++esac
++`
++	if err := os.WriteFile(sysctlPath, []byte(sysctlScript), 0o755); err != nil {
++		t.Fatalf("write fake sysctl: %v", err)
++	}
++	t.Setenv("PATH", sysctlDir+":"+os.Getenv("PATH"))
++
++	info, err := NewSystemCollectorImpl("test").Collect(context.Background())
++	if err != nil {
++		t.Fatalf("Collect() error = %v", err)
++	}
++	if info == nil {
++		t.Fatal("Collect() information = nil")
++	}
++	if info.MemoryMaximum != 1000 {
++		t.Fatalf("MemoryMaximum = %d, want 1000", info.MemoryMaximum)
++	}
++	if info.MemoryCurrent != 600 {
++		t.Fatalf("MemoryCurrent = %d, want 600", info.MemoryCurrent)
++	}
++	if info.FileDescriptorMaximum != 2000 {
++		t.Fatalf("FileDescriptorMaximum = %d, want 2000", info.FileDescriptorMaximum)
++	}
++	if info.FileDescriptorCurrent != 50 {
++		t.Fatalf("FileDescriptorCurrent = %d, want 50", info.FileDescriptorCurrent)
++	}
++}
++
++func TestFreeBSDSystemCollectorPreservesSysctlFailureOutput(t *testing.T) {
++	sysctlDir := t.TempDir()
++	sysctlPath := filepath.Join(sysctlDir, "sysctl")
++	const sysctlScript = `#!/bin/sh
++printf 'sysctl failed\n' >&2
++exit 1
++`
++	if err := os.WriteFile(sysctlPath, []byte(sysctlScript), 0o755); err != nil {
++		t.Fatalf("write fake sysctl: %v", err)
++	}
++	t.Setenv("PATH", sysctlDir+":"+os.Getenv("PATH"))
++
++	_, rawInfo, err := collectMemoryInformation(context.Background())
++	if err == nil {
++		t.Fatal("collectMemoryInformation() error = nil")
++	}
++	if rawInfo != "sysctl failed\n" {
++		t.Fatalf("collectMemoryInformation() raw info = %q, want sysctl stderr", rawInfo)
++	}
++}

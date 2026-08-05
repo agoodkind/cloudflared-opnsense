@@ -1,0 +1,229 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestBuildCloudflaredLoadsDeclaredPatchManifest(t *testing.T) {
+	upstreamDir := newPatchCheckout(t, "fixture\n")
+	runGit(t, upstreamDir, "tag", "2026.7.3")
+	remoteDir := filepath.Join(t.TempDir(), "cloudflared.git")
+	runGit(t, filepath.Dir(remoteDir), "init", "--bare", "--initial-branch=main", remoteDir)
+	runGit(t, upstreamDir, "remote", "add", "origin", remoteDir)
+	runGit(t, upstreamDir, "push", "origin", "patch-tests:refs/heads/main", "refs/tags/2026.7.3")
+
+	gitConfigPath := filepath.Join(t.TempDir(), "gitconfig")
+	gitConfig := fmt.Sprintf(
+		"[url %q]\n\tinsteadOf = https://github.com/cloudflare/cloudflared.git\n",
+		"file://"+remoteDir,
+	)
+	if err := os.WriteFile(gitConfigPath, []byte(gitConfig), 0o600); err != nil {
+		t.Fatalf("write Git configuration: %v", err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", gitConfigPath)
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	t.Setenv("GIT_ALLOW_PROTOCOL", "file")
+
+	repoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoDir, "builder"), 0o755); err != nil {
+		t.Fatalf("create builder directory: %v", err)
+	}
+	writeManifestAt(t, repoDir, "schema_version = 2\n")
+
+	previousWorkDir := workDir
+	workDir = t.TempDir()
+	t.Cleanup(func() {
+		workDir = previousWorkDir
+	})
+
+	err := buildCloudflared("2026.7.3", repoDir)
+	if err == nil {
+		t.Fatal("buildCloudflared() error = nil")
+	}
+	if !strings.Contains(err.Error(), "schema_version") {
+		t.Fatalf("buildCloudflared() error = %q, want schema_version", err)
+	}
+}
+
+func TestPatchManifestHonorsFreeBSDDiagnosticsVersionBoundary(t *testing.T) {
+	projectRoot, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatalf("resolve project root: %v", err)
+	}
+	manifest, err := loadPatchManifest(filepath.Join(projectRoot, "builder", "patches.toml"))
+	if err != nil {
+		t.Fatalf("loadPatchManifest() error = %v", err)
+	}
+
+	beforeBoundary, err := selectPatches(manifest, "2024.11.1")
+	if err != nil {
+		t.Fatalf("selectPatches() before boundary error = %v", err)
+	}
+	if len(beforeBoundary) != 0 {
+		t.Fatalf("selectPatches() before boundary returned %d patches, want 0", len(beforeBoundary))
+	}
+
+	afterBoundary, err := selectPatches(manifest, "2024.11.2")
+	if err != nil {
+		t.Fatalf("selectPatches() after boundary error = %v", err)
+	}
+	if len(afterBoundary) != 1 || afterBoundary[0].ID != "freebsd-diagnostics" {
+		t.Fatalf("selectPatches() after boundary = %v, want freebsd-diagnostics", afterBoundary)
+	}
+}
+
+func TestFreeBSDDiagnosticsPatchRunsAndSkipsWhenAlreadyApplied(t *testing.T) {
+	sourceDir := createCloudflaredDiagnosticsFixture(t)
+	repoDir := createFreeBSDDiagnosticsPatchFixture(t)
+
+	if err := applyBuildPatches(repoDir, sourceDir, "2026.7.3"); err != nil {
+		t.Fatalf("applyBuildPatches() first run: %v", err)
+	}
+	if err := applyBuildPatches(repoDir, sourceDir, "2026.7.3"); err != nil {
+		t.Fatalf("applyBuildPatches() second run: %v", err)
+	}
+
+	enableFreeBSDDiagnosticsOnHost(t, sourceDir)
+	command := exec.CommandContext(t.Context(), "go", "test", "-count=1", "-v", "./diagnostic/...")
+	command.Dir = sourceDir
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run patched diagnostics tests: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "TestFreeBSDSystemCollectorReportsUsedMemoryAndOpenFiles") {
+		t.Fatalf("patched diagnostics test did not run:\n%s", output)
+	}
+}
+
+func createFreeBSDDiagnosticsPatchFixture(t *testing.T) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	patchDir := filepath.Join(repoDir, "builder", "patches")
+	if err := os.MkdirAll(patchDir, 0o755); err != nil {
+		t.Fatalf("create patch directory: %v", err)
+	}
+	projectRoot, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatalf("resolve project root: %v", err)
+	}
+	patchData, err := os.ReadFile(filepath.Join(projectRoot, "builder", "patches", "freebsd-diagnostics.patch"))
+	if err != nil {
+		t.Fatalf("read diagnostics patch: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(patchDir, "freebsd-diagnostics.patch"), patchData, 0o600); err != nil {
+		t.Fatalf("write diagnostics patch: %v", err)
+	}
+	writeManifestAt(t, repoDir, `schema_version = 1
+
+[[patches]]
+id = "freebsd-diagnostics"
+file = "patches/freebsd-diagnostics.patch"
+`)
+	return repoDir
+}
+
+func createCloudflaredDiagnosticsFixture(t *testing.T) string {
+	t.Helper()
+
+	sourceDir := t.TempDir()
+	files := map[string]string{
+		"go.mod": "module github.com/cloudflare/cloudflared\n\ngo 1.26.5\n",
+		filepath.Join("diagnostic", "network", "collector_unix.go"): `//go:build darwin || linux
+
+package diagnostic
+`,
+		filepath.Join("diagnostic", "network", "collector_unix_test.go"): `//go:build darwin || linux
+
+package diagnostic_test
+`,
+		filepath.Join("diagnostic", "system_collector.go"): `package diagnostic
+
+import "context"
+
+type MemoryInformation struct { MemoryMaximum, MemoryCurrent uint64 }
+type FileDescriptorInformation struct { FileDescriptorMaximum, FileDescriptorCurrent uint64 }
+type OperatingSystemInformation struct {
+	OsSystem, Name, OsVersion, OsRelease, Architecture string
+}
+type DiskVolumeInformation struct{}
+type SystemInformation struct {
+	MemoryMaximum, MemoryCurrent, FileDescriptorMaximum, FileDescriptorCurrent uint64
+}
+type SystemInformationError struct { Err error; RawInfo string }
+type SystemInformationGeneralError struct {
+	MemoryInformationError SystemInformationError
+	FileDescriptorsInformationError SystemInformationError
+	DiskVolumeInformationError SystemInformationError
+	OperatingSystemInformationError SystemInformationError
+}
+func (SystemInformationGeneralError) Error() string { return "system collector error" }
+func NewSystemInformation(
+	memoryMaximum, memoryCurrent, fileDescriptorMaximum, fileDescriptorCurrent uint64,
+	osystem, name, osVersion, osRelease, architecture, cloudflaredVersion, goVersion, goArchitecture string,
+	disks []DiskVolumeInformation,
+) *SystemInformation {
+	return &SystemInformation{
+		MemoryMaximum: memoryMaximum,
+		MemoryCurrent: memoryCurrent,
+		FileDescriptorMaximum: fileDescriptorMaximum,
+		FileDescriptorCurrent: fileDescriptorCurrent,
+	}
+}
+func collectDiskVolumeInformationUnix(context.Context) ([]DiskVolumeInformation, string, error) {
+	return nil, "", nil
+}
+func collectOSInformationUnix(context.Context) (*OperatingSystemInformation, string, error) {
+	return &OperatingSystemInformation{}, "", nil
+}
+`,
+		filepath.Join("diagnostic", "system_collector_linux.go"): `//go:build linux
+
+package diagnostic
+`,
+	}
+	for relativePath, content := range files {
+		path := filepath.Join(sourceDir, relativePath)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create parent directory for %s: %v", relativePath, err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", relativePath, err)
+		}
+	}
+	runGit(t, sourceDir, "init", "--initial-branch=patch-tests")
+	runGit(t, sourceDir, "config", "user.email", "alex@goodkind.io")
+	runGit(t, sourceDir, "config", "user.name", "Alexander Goodkind")
+	runGit(t, sourceDir, "add", ".")
+	runGit(t, sourceDir, "commit", "-m", "add diagnostics fixture")
+	return sourceDir
+}
+
+func enableFreeBSDDiagnosticsOnHost(t *testing.T, sourceDir string) {
+	t.Helper()
+
+	files := map[string]string{
+		"system_collector_freebsd.go":      "system_collector_host.go",
+		"system_collector_freebsd_test.go": "system_collector_host_test.go",
+	}
+	for sourceName, hostName := range files {
+		sourcePath := filepath.Join(sourceDir, "diagnostic", sourceName)
+		data, err := os.ReadFile(sourcePath)
+		if err != nil {
+			t.Fatalf("read %s: %v", sourceName, err)
+		}
+		content := strings.Replace(string(data), "//go:build freebsd\n\n", "", 1)
+		hostPath := filepath.Join(sourceDir, "diagnostic", hostName)
+		if err := os.WriteFile(hostPath, []byte(content), 0o600); err != nil {
+			t.Fatalf("enable %s on host: %v", sourceName, err)
+		}
+		if err := os.Remove(sourcePath); err != nil {
+			t.Fatalf("remove %s: %v", sourceName, err)
+		}
+	}
+}
