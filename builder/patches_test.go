@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,7 +94,33 @@ applies_to = "not a constraint"
 			wantErr: "applies_to",
 		},
 		{
-			name: "rejects git sources before resolver support",
+			name: "rejects option-like git remotes",
+			manifest: `schema_version = 1
+
+[[patches]]
+id = "upstream"
+[patches.git]
+remote = "--upload-pack=malicious"
+ref = "refs/pull/1707/head"
+expected_commit = "834e9d1706d8bf53b83e66af64f4e9856321c2ff"
+`,
+			wantErr: "remote",
+		},
+		{
+			name: "rejects invalid git refs",
+			manifest: `schema_version = 1
+
+[[patches]]
+id = "upstream"
+[patches.git]
+remote = "https://github.com/cloudflare/cloudflared.git"
+ref = "--upload-pack=malicious"
+expected_commit = "834e9d1706d8bf53b83e66af64f4e9856321c2ff"
+`,
+			wantErr: "ref",
+		},
+		{
+			name: "requires full expected commit",
 			manifest: `schema_version = 1
 
 [[patches]]
@@ -101,9 +128,9 @@ id = "upstream"
 [patches.git]
 remote = "https://github.com/cloudflare/cloudflared.git"
 ref = "refs/pull/1707/head"
-expected_commit = "834e9d1706d8bf53b83e66af64f4e9856321c2ff"
+expected_commit = "834e9d1"
 `,
-			wantErr: "unsupported git source",
+			wantErr: "full commit SHA",
 		},
 	}
 
@@ -118,6 +145,23 @@ expected_commit = "834e9d1706d8bf53b83e66af64f4e9856321c2ff"
 				t.Fatalf("loadPatchManifest() error = %q, want %q", err, test.wantErr)
 			}
 		})
+	}
+}
+
+func TestLoadPatchManifestAcceptsGuardedGitSource(t *testing.T) {
+	t.Parallel()
+
+	path := writePatchManifest(t, `schema_version = 1
+
+[[patches]]
+id = "upstream"
+[patches.git]
+remote = "https://github.com/cloudflare/cloudflared.git"
+ref = "refs/pull/1707/head"
+expected_commit = "834e9d1706d8bf53b83e66af64f4e9856321c2ff"
+`)
+	if _, err := loadPatchManifest(path); err != nil {
+		t.Fatalf("loadPatchManifest() error = %v", err)
 	}
 }
 
@@ -469,6 +513,245 @@ func TestFindRepoDirSkipsNestedBuilderModule(t *testing.T) {
 	}
 }
 
+func TestMaterializeGitPatchAppliesOneCommitFromMatchingMutableRef(t *testing.T) {
+	t.Parallel()
+
+	remoteDir, _, sourceDir := newRemotePatchRepository(t, "first\n")
+	commit := commitRemotePatch(t, remoteDir, "refs/heads/patch", "second\n")
+	spec := patchSpec{
+		ID: "upstream-patch",
+		Git: &gitPatchSource{
+			Remote:         remoteDir,
+			Ref:            "refs/heads/patch",
+			ExpectedCommit: commit,
+		},
+		Strip: 1,
+	}
+
+	patchPath, cleanup, err := materializeGitPatch(sourceDir, spec)
+	if err != nil {
+		t.Fatalf("materializeGitPatch() error = %v", err)
+	}
+	t.Cleanup(cleanup)
+
+	disposition, err := applyPatchFile(sourceDir, spec, patchPath)
+	if err != nil {
+		t.Fatalf("applyPatchFile() error = %v", err)
+	}
+	if disposition != patchApplied {
+		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchApplied)
+	}
+	if got := readPatchFile(t, filepath.Join(sourceDir, "message.txt")); got != "second\n" {
+		t.Fatalf("message.txt = %q, want %q", got, "second\n")
+	}
+}
+
+func TestMaterializeGitPatchKeepsGitDiagnosticsOutOfPatchData(t *testing.T) {
+	remoteDir, _, sourceDir := newRemotePatchRepository(t, "first\n")
+	commit := commitRemotePatch(t, remoteDir, "refs/heads/patch", "second\n")
+	t.Setenv("GIT_TRACE", "1")
+	spec := patchSpec{
+		ID: "traced-upstream-patch",
+		Git: &gitPatchSource{
+			Remote:         remoteDir,
+			Ref:            "refs/heads/patch",
+			ExpectedCommit: commit,
+		},
+		Strip: 1,
+	}
+
+	patchPath, cleanup, err := materializeGitPatch(sourceDir, spec)
+	if err != nil {
+		t.Fatalf("materializeGitPatch() error = %v", err)
+	}
+	t.Cleanup(cleanup)
+
+	disposition, err := applyPatchFile(sourceDir, spec, patchPath)
+	if err != nil {
+		t.Fatalf("applyPatchFile() error = %v", err)
+	}
+	if disposition != patchApplied {
+		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchApplied)
+	}
+}
+
+func TestMaterializeGitPatchAcceptsAnnotatedTagRef(t *testing.T) {
+	t.Parallel()
+
+	remoteDir, upstreamDir, sourceDir := newRemotePatchRepository(t, "first\n")
+	commit := commitAndPushRemotePatch(t, upstreamDir, "refs/heads/patch", "second\n")
+	runGit(t, upstreamDir, "tag", "-a", "patch-v1", "-m", "patch v1", commit)
+	runGit(t, upstreamDir, "push", "origin", "refs/tags/patch-v1")
+	spec := patchSpec{
+		ID: "tagged-upstream-patch",
+		Git: &gitPatchSource{
+			Remote:         remoteDir,
+			Ref:            "refs/tags/patch-v1",
+			ExpectedCommit: commit,
+		},
+		Strip: 1,
+	}
+
+	patchPath, cleanup, err := materializeGitPatch(sourceDir, spec)
+	if err != nil {
+		t.Fatalf("materializeGitPatch() error = %v", err)
+	}
+	t.Cleanup(cleanup)
+
+	disposition, err := applyPatchFile(sourceDir, spec, patchPath)
+	if err != nil {
+		t.Fatalf("applyPatchFile() error = %v", err)
+	}
+	if disposition != patchApplied {
+		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchApplied)
+	}
+}
+
+func TestMaterializeGitPatchRejectsMovedMutableRef(t *testing.T) {
+	t.Parallel()
+
+	remoteDir, upstreamDir, sourceDir := newRemotePatchRepository(t, "first\n")
+	expectedCommit := commitAndPushRemotePatch(t, upstreamDir, "refs/heads/patch", "second\n")
+	actualCommit := commitAndPushRemotePatch(t, upstreamDir, "refs/heads/patch", "third\n")
+	spec := patchSpec{
+		ID: "moved-upstream-patch",
+		Git: &gitPatchSource{
+			Remote:         remoteDir,
+			Ref:            "refs/heads/patch",
+			ExpectedCommit: expectedCommit,
+		},
+		Strip: 1,
+	}
+
+	_, cleanup, err := materializeGitPatch(sourceDir, spec)
+	cleanup()
+	if err == nil {
+		t.Fatal("materializeGitPatch() error = nil")
+	}
+	for _, want := range []string{expectedCommit, actualCommit, "moved"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("materializeGitPatch() error = %q, want %q", err, want)
+		}
+	}
+}
+
+func TestMaterializeGitPatchRejectsMergeCommit(t *testing.T) {
+	t.Parallel()
+
+	remoteDir, upstreamDir, sourceDir := newRemotePatchRepository(t, "first\n")
+	runGit(t, upstreamDir, "checkout", "-b", "feature")
+	writeRemoteFile(t, upstreamDir, "message.txt", "feature\n")
+	runGit(t, upstreamDir, "add", "message.txt")
+	runGit(t, upstreamDir, "commit", "-m", "feature message")
+	runGit(t, upstreamDir, "checkout", "patch-tests")
+	writeRemoteFile(t, upstreamDir, "other.txt", "main\n")
+	runGit(t, upstreamDir, "add", "other.txt")
+	runGit(t, upstreamDir, "commit", "-m", "main file")
+	runGit(t, upstreamDir, "merge", "--no-ff", "feature", "-m", "merge feature")
+	mergeCommit := strings.TrimSpace(runGit(t, upstreamDir, "rev-parse", "HEAD"))
+	runGit(t, upstreamDir, "push", "origin", "HEAD:refs/heads/merge")
+
+	spec := patchSpec{
+		ID: "merge-upstream-patch",
+		Git: &gitPatchSource{
+			Remote:         remoteDir,
+			Ref:            "refs/heads/merge",
+			ExpectedCommit: mergeCommit,
+		},
+		Strip: 1,
+	}
+
+	_, cleanup, err := materializeGitPatch(sourceDir, spec)
+	cleanup()
+	if err == nil {
+		t.Fatal("materializeGitPatch() error = nil")
+	}
+	if !strings.Contains(err.Error(), "merge") {
+		t.Fatalf("materializeGitPatch() error = %q, want merge", err)
+	}
+}
+
+func TestMaterializeGitPatchReportsFetchFailure(t *testing.T) {
+	t.Parallel()
+
+	sourceDir := newPatchCheckout(t, "first\n")
+	spec := patchSpec{
+		ID: "missing-upstream-patch",
+		Git: &gitPatchSource{
+			Remote:         filepath.Join(t.TempDir(), "missing.git"),
+			Ref:            "refs/heads/main",
+			ExpectedCommit: "834e9d1706d8bf53b83e66af64f4e9856321c2ff",
+		},
+		Strip: 1,
+	}
+
+	_, cleanup, err := materializeGitPatch(sourceDir, spec)
+	cleanup()
+	if err == nil {
+		t.Fatal("materializeGitPatch() error = nil")
+	}
+	if !strings.Contains(err.Error(), "fetch") {
+		t.Fatalf("materializeGitPatch() error = %q, want fetch", err)
+	}
+}
+
+func TestMaterializeGitPatchCleanupRemovesTemporaryDiff(t *testing.T) {
+	t.Parallel()
+
+	remoteDir, _, sourceDir := newRemotePatchRepository(t, "first\n")
+	commit := commitRemotePatch(t, remoteDir, "refs/heads/patch", "second\n")
+	spec := patchSpec{
+		ID: "cleanup-upstream-patch",
+		Git: &gitPatchSource{
+			Remote:         remoteDir,
+			Ref:            "refs/heads/patch",
+			ExpectedCommit: commit,
+		},
+		Strip: 1,
+	}
+
+	patchPath, cleanup, err := materializeGitPatch(sourceDir, spec)
+	if err != nil {
+		t.Fatalf("materializeGitPatch() error = %v", err)
+	}
+	if _, err := os.Stat(patchPath); err != nil {
+		t.Fatalf("stat materialized patch: %v", err)
+	}
+	cleanup()
+	if _, err := os.Stat(patchPath); !os.IsNotExist(err) {
+		t.Fatalf("stat materialized patch after cleanup = %v, want not exist", err)
+	}
+}
+
+func TestApplyPatchManifestAppliesGuardedGitPatch(t *testing.T) {
+	t.Parallel()
+
+	remoteDir, _, sourceDir := newRemotePatchRepository(t, "first\n")
+	commit := commitRemotePatch(t, remoteDir, "refs/heads/patch", "second\n")
+	repoDir := t.TempDir()
+	patchDir := filepath.Join(repoDir, "builder")
+	if err := os.MkdirAll(patchDir, 0o755); err != nil {
+		t.Fatalf("create patch directory: %v", err)
+	}
+	writeManifestAt(t, repoDir, fmt.Sprintf(`schema_version = 1
+
+[[patches]]
+id = "guarded-upstream-patch"
+strip = 1
+[patches.git]
+remote = %q
+ref = "refs/heads/patch"
+expected_commit = %q
+`, remoteDir, commit))
+
+	if err := applyPatchManifest(repoDir, sourceDir, "2026.7.3"); err != nil {
+		t.Fatalf("applyPatchManifest() error = %v", err)
+	}
+	if got := readPatchFile(t, filepath.Join(sourceDir, "message.txt")); got != "second\n" {
+		t.Fatalf("message.txt = %q, want %q", got, "second\n")
+	}
+}
+
 func newPatchCheckout(t *testing.T, contents string) string {
 	t.Helper()
 
@@ -482,6 +765,54 @@ func newPatchCheckout(t *testing.T, contents string) string {
 	runGit(t, sourceDir, "add", "message.txt")
 	runGit(t, sourceDir, "commit", "-m", "add message")
 	return sourceDir
+}
+
+func newRemotePatchRepository(t *testing.T, contents string) (string, string, string) {
+	t.Helper()
+
+	remoteParent := t.TempDir()
+	remoteDir := filepath.Join(remoteParent, "remote.git")
+	runGit(t, remoteParent, "init", "--bare", "--initial-branch=main", remoteDir)
+
+	upstreamDir := newPatchCheckout(t, contents)
+	runGit(t, upstreamDir, "remote", "add", "origin", remoteDir)
+	runGit(t, upstreamDir, "push", "origin", "patch-tests:refs/heads/main")
+
+	sourceParent := t.TempDir()
+	sourceDir := filepath.Join(sourceParent, "source")
+	runGit(t, sourceParent, "clone", remoteDir, sourceDir)
+	return remoteDir, upstreamDir, sourceDir
+}
+
+func commitRemotePatch(t *testing.T, remoteDir string, ref string, contents string) string {
+	t.Helper()
+
+	upstreamDir := filepath.Join(t.TempDir(), "upstream")
+	runGit(t, filepath.Dir(remoteDir), "clone", remoteDir, upstreamDir)
+	runGit(t, upstreamDir, "config", "user.email", "alex@goodkind.io")
+	runGit(t, upstreamDir, "config", "user.name", "Alexander Goodkind")
+	runGit(t, upstreamDir, "checkout", "-b", "patch-work", "origin/main")
+	return commitAndPushRemotePatch(t, upstreamDir, ref, contents)
+}
+
+func commitAndPushRemotePatch(t *testing.T, upstreamDir string, ref string, contents string) string {
+	t.Helper()
+
+	writeRemoteFile(t, upstreamDir, "message.txt", contents)
+	runGit(t, upstreamDir, "add", "message.txt")
+	runGit(t, upstreamDir, "commit", "-m", "update message")
+	commit := strings.TrimSpace(runGit(t, upstreamDir, "rev-parse", "HEAD"))
+	runGit(t, upstreamDir, "push", "origin", "HEAD:"+ref)
+	return commit
+}
+
+func writeRemoteFile(t *testing.T, directory string, name string, contents string) {
+	t.Helper()
+
+	path := filepath.Join(directory, name)
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
 }
 
 func writeGitPatch(t *testing.T, sourceDir string, contents string) string {
