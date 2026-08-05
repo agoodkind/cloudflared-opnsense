@@ -1,13 +1,16 @@
 schema_version = 1
 
 [[patches]]
-id = "freebsd-token-file"
-file = "patches/freebsd-token-file.patch"
-applies_to = ">=2026.7.3"
-strip = 1
-
-[[patches]]
 id = "freebsd-diagnostics"
 applies_to = ">2024.11.1"
 file = "patches/freebsd-diagnostics.patch"
 strip = 1
+
+[[patches]]
+id = "freebsd-token-file"
+applies_to = ">=2026.7.3"
+strip = 1
+[patches.git]
+remote = "https://github.com/cloudflare/cloudflared.git"
+ref = "refs/pull/1707/head"
+expected_commit = "834e9d1706d8bf53b83e66af64f4e9856321c2ff"
