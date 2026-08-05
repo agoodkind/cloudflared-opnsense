@@ -54,13 +54,8 @@ func buildCloudflared(version string, repoDir string) error {
 		return fmt.Errorf("git clone: %w", err)
 	}
 
-	logf("applying FreeBSD patches")
-	if err := patchFreeBSD(srcDir); err != nil {
-		return fmt.Errorf("patch: %w", err)
-	}
-	logf("applying declared patches")
-	if err := applyPatchManifest(repoDir, srcDir, version); err != nil {
-		return fmt.Errorf("apply patch manifest: %w", err)
+	if err := applyBuildPatches(repoDir, srcDir, version); err != nil {
+		return err
 	}
 
 	buildDate, err := cloudflaredBuildDate(srcDir)
@@ -80,6 +75,15 @@ func buildCloudflared(version string, repoDir string) error {
 	}
 
 	logf(fmt.Sprintf("build complete: cloudflared %d bytes", info.Size()))
+	return nil
+}
+
+func applyBuildPatches(repoDir string, srcDir string, version string) error {
+	logf("applying declared patches")
+	if err := applyPatchManifest(repoDir, srcDir, version); err != nil {
+		slog.Error("apply patch manifest failed", "err", err, "version", version)
+		return fmt.Errorf("apply patch manifest: %w", err)
+	}
 	return nil
 }
 
@@ -104,74 +108,6 @@ func cloudflaredBuildDate(srcDir string) (string, error) {
 	}
 
 	return commitTime.UTC().Format("2006-01-02-15:04 UTC"), nil
-}
-
-// patchFreeBSD applies the minimal sed substitutions that make cloudflared
-// compile on FreeBSD.  The patches are deliberately minimal to stay mergeable
-// with upstream.
-func patchFreeBSD(srcDir string) error {
-	files := []string{
-		filepath.Join(srcDir, "diagnostic", "network", "collector_unix.go"),
-		filepath.Join(srcDir, "diagnostic", "network", "collector_unix_test.go"),
-	}
-	for _, f := range files {
-		if err := sedInPlace(f, "darwin || linux", "darwin || linux || freebsd"); err != nil {
-			slog.Warn("patch may not exist in this version", "err", err, "file", f)
-			logf(fmt.Sprintf("WARNING: patch %s: %v (may not exist in this version)", f, err))
-		}
-	}
-
-	// Create FreeBSD system collector by copying the Linux one and replacing
-	// the build tag. srcDir is derived from the externally-supplied work-dir
-	// flag, so the destination path is reject-validated against a safe alphabet
-	// and then normalized through filepath.Clean, which strips any traversal
-	// components, before it reaches the write.
-	linuxCollector := filepath.Clean(filepath.Join(srcDir, "diagnostic", "system_collector_linux.go"))
-	bsdCollector := filepath.Clean(filepath.Join(srcDir, "diagnostic", "system_collector_freebsd.go"))
-	if data, err := readFileContent(linuxCollector); err == nil {
-		patched := strings.ReplaceAll(string(data), "linux", "freebsd")
-		if err := os.WriteFile(bsdCollector, []byte(patched), 0o600); err != nil {
-			slog.Error("write freebsd collector failed", "err", err, "path", bsdCollector)
-			return fmt.Errorf("write %s: %w", bsdCollector, err)
-		}
-	}
-	return nil
-}
-
-func sedInPlace(path, old, newVal string) error {
-	// path is derived from the externally-supplied work-dir flag, so it is
-	// normalized through filepath.Clean (which strips traversal) before any
-	// file operation. Content is read with os.Open + io.ReadAll rather than
-	// os.ReadFile so the bytes written back are not treated as external input.
-	safePath := filepath.Clean(path)
-	data, err := readFileContent(safePath)
-	if err != nil {
-		return err
-	}
-	replaced := strings.ReplaceAll(string(data), old, newVal)
-	if err := os.WriteFile(safePath, []byte(replaced), 0o600); err != nil {
-		slog.Error("write patched file failed", "err", err, "path", safePath)
-		return fmt.Errorf("write %s: %w", safePath, err)
-	}
-	return nil
-}
-
-// readFileContent reads an entire file via [os.Open] + [io.ReadAll]. Reading
-// this way (instead of [os.ReadFile]) keeps the returned bytes from being
-// classified as external input by taint analysis when later written elsewhere.
-func readFileContent(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		slog.Error("open file failed", "err", err, "path", path)
-		return nil, fmt.Errorf("open %s: %w", path, err)
-	}
-	defer f.Close()
-	data, err := io.ReadAll(f)
-	if err != nil {
-		slog.Error("read file failed", "err", err, "path", path)
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	return data, nil
 }
 
 // ---- packaging -------------------------------------------------------------
