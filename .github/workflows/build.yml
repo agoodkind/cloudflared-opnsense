@@ -60,6 +60,20 @@ jobs:
           cd builder && GOOS=freebsd GOARCH=amd64 \
             go build -trimpath -buildvcs=false -o /dev/null .
 
+  root-govulncheck:
+    name: Advisory / Root Govulncheck
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run root module govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
+
   builder:
     uses: agoodkind/go-makefile/.github/workflows/_ci.yml@main
     permissions:
@@ -68,6 +82,7 @@ jobs:
       id-token: write
     with:
       go_version_file: builder/go.mod
+      job_layout: parallel
       working_directory: builder
 
   build:
