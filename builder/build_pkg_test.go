@@ -41,12 +41,56 @@ func TestBuildCloudflaredLoadsDeclaredPatchManifest(t *testing.T) {
 		workDir = previousWorkDir
 	})
 
-	err := buildCloudflared("2026.7.3", repoDir)
+	expectedCommit := strings.TrimSpace(runGit(t, upstreamDir, "rev-parse", "HEAD"))
+	err := buildCloudflared("2026.7.3", expectedCommit, repoDir)
 	if err == nil {
 		t.Fatal("buildCloudflared() error = nil")
 	}
 	if !strings.Contains(err.Error(), "schema_version") {
 		t.Fatalf("buildCloudflared() error = %q, want schema_version", err)
+	}
+}
+
+func TestBuildCloudflaredRejectsMovedTagBeforePatching(t *testing.T) {
+	upstreamDir := newPatchCheckout(t, "first\n")
+	expectedCommit := strings.TrimSpace(runGit(t, upstreamDir, "rev-parse", "HEAD"))
+	runGit(t, upstreamDir, "tag", "2026.8.1")
+
+	fixturePath := filepath.Join(upstreamDir, "fixture.txt")
+	if err := os.WriteFile(fixturePath, []byte("moved\n"), 0o600); err != nil {
+		t.Fatalf("move tag fixture: %v", err)
+	}
+	runGit(t, upstreamDir, "add", "fixture.txt")
+	runGit(t, upstreamDir, "commit", "-m", "move release tag")
+	runGit(t, upstreamDir, "tag", "-f", "2026.8.1")
+
+	remoteDir := filepath.Join(t.TempDir(), "cloudflared.git")
+	runGit(t, filepath.Dir(remoteDir), "init", "--bare", "--initial-branch=main", remoteDir)
+	runGit(t, upstreamDir, "remote", "add", "origin", remoteDir)
+	runGit(t, upstreamDir, "push", "origin", "patch-tests:refs/heads/main", "refs/tags/2026.8.1")
+
+	gitConfigPath := filepath.Join(t.TempDir(), "gitconfig")
+	gitConfig := fmt.Sprintf(
+		"[url %q]\n\tinsteadOf = https://github.com/cloudflare/cloudflared.git\n",
+		"file://"+remoteDir,
+	)
+	if err := os.WriteFile(gitConfigPath, []byte(gitConfig), 0o600); err != nil {
+		t.Fatalf("write Git configuration: %v", err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", gitConfigPath)
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	t.Setenv("GIT_ALLOW_PROTOCOL", "file")
+
+	previousWorkDir := workDir
+	workDir = t.TempDir()
+	t.Cleanup(func() { workDir = previousWorkDir })
+
+	err := buildCloudflared("2026.8.1", expectedCommit, t.TempDir())
+	if err == nil {
+		t.Fatal("buildCloudflared() error = nil")
+	}
+	if !strings.Contains(err.Error(), "cloned cloudflared tag") {
+		t.Fatalf("buildCloudflared() error = %q, want moved tag rejection", err)
 	}
 }
 

@@ -20,6 +20,7 @@ jobs:
     outputs:
       version: ${{ steps.check.outputs.version }}
       revision: ${{ steps.check.outputs.revision }}
+      source_commit: ${{ steps.check.outputs.source_commit }}
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -103,6 +104,7 @@ jobs:
             set -e
             CF_VERSION="${{ needs.check.outputs.version }}"
             CF_REVISION="${{ needs.check.outputs.revision }}"
+            CF_SOURCE_COMMIT="${{ needs.check.outputs.source_commit }}"
             REPO_DIR="${GITHUB_WORKSPACE}"
             WORK_DIR="${GITHUB_WORKSPACE}/.cache/cf-build"
             PKG_REPO_DIR="${GITHUB_WORKSPACE}/pkg-repo-build"
@@ -123,6 +125,7 @@ jobs:
             # Build the patched upstream source before exercising its diagnostics.
             "${REPO_DIR}/dist/cloudflared-builder" \
               -version "${CF_VERSION}" \
+              -source-commit "${CF_SOURCE_COMMIT}" \
               -revision "${CF_REVISION}" \
               -repo-dir "${REPO_DIR}" \
               -work-dir "${WORK_DIR}" \
@@ -161,6 +164,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.check.outputs.version }}
       REVISION: ${{ needs.check.outputs.revision }}
+      SOURCE_COMMIT: ${{ needs.check.outputs.source_commit }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -187,6 +191,7 @@ jobs:
         run: |
           dist/cloudflared-builder \
             -version "${VERSION}" \
+            -source-commit "${SOURCE_COMMIT}" \
             -revision "${REVISION}" \
             -repo-dir "${GITHUB_WORKSPACE}" \
             -pkg-repo-dir _artifact \
@@ -202,6 +207,7 @@ jobs:
         run: |
           dist/cloudflared-builder \
             -version "${VERSION}" \
+            -source-commit "${SOURCE_COMMIT}" \
             -revision "${REVISION}" \
             -repo-dir "${GITHUB_WORKSPACE}" \
             -pkg-repo-dir _artifact \
@@ -219,6 +225,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.check.outputs.version }}
       REVISION: ${{ needs.check.outputs.revision }}
+      SOURCE_COMMIT: ${{ needs.check.outputs.source_commit }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -258,6 +265,7 @@ jobs:
         run: |
           dist/cloudflared-builder \
             -version "${VERSION}" \
+            -source-commit "${SOURCE_COMMIT}" \
             -revision "${REVISION}" \
             -repo-dir "${GITHUB_WORKSPACE}" \
             -pkg-repo-dir _artifact \

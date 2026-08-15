@@ -550,6 +550,7 @@ func Test_validatePublishFlags(t *testing.T) {
 }
 
 func TestCmdPublishPreviewBypassesProductionDecision(t *testing.T) {
+	useUpstreamAPIServer(t, validUpstreamAPIFixture())
 	originalPkgRepoDir := pkgRepoDir
 	pkgRepoDir = t.TempDir()
 	t.Cleanup(func() {
@@ -558,10 +559,11 @@ func TestCmdPublishPreviewBypassesProductionDecision(t *testing.T) {
 	t.Setenv(cloudflareAccountIDEnv, "")
 
 	err := cmdPublish(&config{
-		version:  "2026.8.0",
-		revision: 1,
-		repoDir:  t.TempDir(),
-		preview:  true,
+		version:      "2026.8.1",
+		revision:     1,
+		sourceCommit: testSourceCommit,
+		repoDir:      t.TempDir(),
+		preview:      true,
 	})
 	if err == nil {
 		t.Fatal("cmdPublish preview returned nil error")
