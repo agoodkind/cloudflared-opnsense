@@ -77,18 +77,8 @@ func resolveUpstreamRelease(version string) (upstreamRelease, error) {
 		slog.Error("decode cloudflared release failed", "err", err)
 		return upstreamRelease{}, fmt.Errorf("decode cloudflared release: %w", err)
 	}
-	if release.TagName == "" {
-		return upstreamRelease{}, errors.New("cloudflared release has an empty tag_name")
-	}
-	if version != "" && release.TagName != version {
-		return upstreamRelease{}, fmt.Errorf("cloudflared release tag is %q, want %q", release.TagName, version)
-	}
-	if release.Author.Login != cloudflaredReleaseAuthor {
-		return upstreamRelease{}, fmt.Errorf(
-			"cloudflared release author is %q, want %q",
-			release.Author.Login,
-			cloudflaredReleaseAuthor,
-		)
+	if err := validateGitHubRelease(release, version); err != nil {
+		return upstreamRelease{}, err
 	}
 
 	var ref githubGitRef
@@ -150,6 +140,30 @@ func resolveUpstreamRelease(version string) (upstreamRelease, error) {
 	}
 
 	return upstreamRelease{Version: release.TagName, Commit: commit}, nil
+}
+
+func validateGitHubRelease(release githubRelease, requestedVersion string) error {
+	if release.TagName == "" {
+		return errors.New("cloudflared release has an empty tag_name")
+	}
+	if !cloudflaredVersionPattern.MatchString(release.TagName) {
+		return fmt.Errorf("unsafe cloudflared release tag %q", release.TagName)
+	}
+	if requestedVersion != "" && release.TagName != requestedVersion {
+		return fmt.Errorf(
+			"cloudflared release tag is %q, want %q",
+			release.TagName,
+			requestedVersion,
+		)
+	}
+	if release.Author.Login != cloudflaredReleaseAuthor {
+		return fmt.Errorf(
+			"cloudflared release author is %q, want %q",
+			release.Author.Login,
+			cloudflaredReleaseAuthor,
+		)
+	}
+	return nil
 }
 
 func verifyUpstreamRelease(version string, expectedCommit string) error {

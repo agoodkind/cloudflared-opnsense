@@ -411,8 +411,7 @@ func normalizedManifestFingerprint(pkgPath string, kind pkgKind) (string, error)
 // given upstream version, or 0 if none exists. GitHub release tags are the
 // authoritative source of truth.
 func highestExistingRevision(version, repoDir string) (int, error) {
-	out, err := runCmdOutput(repoDir, "gh", "release", "list",
-		"--repo", repoSlug, "--limit", "100", "--json", "tagName")
+	out, err := listPublishedReleases(repoDir)
 	if err != nil {
 		return 0, err
 	}
@@ -438,6 +437,11 @@ func highestExistingRevision(version, repoDir string) (int, error) {
 		}
 	}
 	return highest, nil
+}
+
+var listPublishedReleases = func(repoDir string) (string, error) {
+	return runCmdOutput(repoDir, "gh", "release", "list",
+		"--repo", repoSlug, "--limit", "100", "--json", "tagName")
 }
 
 // releaseManifestFingerprint downloads one asset from a release and returns its
