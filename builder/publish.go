@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,7 +22,7 @@ import (
 
 // ---- publish ---------------------------------------------------------------
 
-func createGitHubRelease(version string, revision int, repoDir string) error {
+func createGitHubRelease(version string, revision int, sourceCommit string, repoDir string) error {
 	pkgVersion := fmt.Sprintf("%s_%d", version, revision)
 	tag := version + "-freebsd-r" + strconv.Itoa(revision)
 	pluginPkg := filepath.Join(pkgRepoDir, "All", pluginName+"-"+pkgVersion+".pkg")
@@ -38,9 +37,10 @@ func createGitHubRelease(version string, revision int, repoDir string) error {
 
 	notes := fmt.Sprintf(
 		"Cloudflared %s packages for FreeBSD\n\n"+
+			"Upstream commit: `%s`\n\n"+
 			"- cloudflared-%s.pkg: Binary package\n"+
 			"- %s-%s.pkg: OPNsense plugin package",
-		version, version, pluginName, pkgVersion,
+		version, sourceCommit, version, pluginName, pkgVersion,
 	)
 
 	return runCmd(repoDir, "gh", "release", "create", tag,
@@ -135,41 +135,11 @@ func saveState(version string, revision int) {
 // ---- GitHub ----------------------------------------------------------------
 
 func latestGitHubVersion() (string, error) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
-		"https://api.github.com/repos/cloudflare/cloudflared/releases/latest", nil)
+	release, err := resolveUpstreamRelease("")
 	if err != nil {
-		slog.Error("build latest-version request failed", "err", err)
-		return "", fmt.Errorf("build request: %w", err)
+		return "", err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	// Authenticate when a token is present to avoid unauthenticated rate limits.
-	if token := os.Getenv("GH_TOKEN"); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Error("fetch latest version failed", "err", err)
-		return "", fmt.Errorf("request latest release: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		statusErr := fmt.Errorf("github API returned status %d", resp.StatusCode)
-		slog.Error("unexpected github status", "err", statusErr)
-		return "", statusErr
-	}
-
-	var rel ghRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		slog.Error("decode latest release failed", "err", err)
-		return "", fmt.Errorf("decode release: %w", err)
-	}
-	if rel.TagName == "" {
-		return "", errors.New("empty tag_name from GitHub API")
-	}
-	return rel.TagName, nil
+	return release.Version, nil
 }
 
 // ---- fs helpers ------------------------------------------------------------
@@ -301,15 +271,12 @@ type publishDecision struct {
 // replaces the inline workflow shell that derived the same values with curl, gh,
 // jq, and sed.
 func cmdPlan(cfg *config) error {
-	v := cfg.version
-	if v == "" {
-		latest, err := latestGitHubVersion()
-		if err != nil {
-			slog.Error("resolve upstream version failed", "err", err)
-			return fmt.Errorf("fetch latest version: %w", err)
-		}
-		v = latest
+	release, err := resolveUpstreamRelease(cfg.version)
+	if err != nil {
+		slog.Error("resolve upstream release failed", "err", err)
+		return fmt.Errorf("resolve upstream release: %w", err)
 	}
+	v := release.Version
 
 	highest, err := highestExistingRevision(v, cfg.repoDir)
 	if err != nil {
@@ -319,6 +286,7 @@ func cmdPlan(cfg *config) error {
 
 	writeGitHubOutput("version", v)
 	writeGitHubOutput("revision", strconv.Itoa(rev))
+	writeGitHubOutput("source_commit", release.Commit)
 	logf(fmt.Sprintf("upstream=%s highest_published=r%d building=r%d", v, highest, rev))
 	return nil
 }
@@ -443,8 +411,7 @@ func normalizedManifestFingerprint(pkgPath string, kind pkgKind) (string, error)
 // given upstream version, or 0 if none exists. GitHub release tags are the
 // authoritative source of truth.
 func highestExistingRevision(version, repoDir string) (int, error) {
-	out, err := runCmdOutput(repoDir, "gh", "release", "list",
-		"--repo", repoSlug, "--limit", "100", "--json", "tagName")
+	out, err := listPublishedReleases(repoDir)
 	if err != nil {
 		return 0, err
 	}
@@ -470,6 +437,11 @@ func highestExistingRevision(version, repoDir string) (int, error) {
 		}
 	}
 	return highest, nil
+}
+
+var listPublishedReleases = func(repoDir string) (string, error) {
+	return runCmdOutput(repoDir, "gh", "release", "list",
+		"--repo", repoSlug, "--limit", "100", "--json", "tagName")
 }
 
 // releaseManifestFingerprint downloads one asset from a release and returns its

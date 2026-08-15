@@ -21,6 +21,11 @@ GO_BUILD_EXTRA_FLAGS := -trimpath -buildvcs=false
 # lint and staticcheck gates.
 GO_MK_MODULES := go-build.mk
 
+# The builder imports the generated Cloudflare SDK root package, whose symbol
+# analysis exhausts hosted-runner memory. Package mode still checks its complete
+# dependency graph without constructing the symbol call graph.
+GOVULNCHECK_TARGETS := -scan=package ./...
+
 # bootstrap.mk fetches go.mk + golangci.yml + every module in GO_MK_MODULES at
 # parse time and -includes them. GO_MK_DEV_DIR (from the environment) points the
 # fetch at a local go-makefile checkout when present.

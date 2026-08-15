@@ -25,7 +25,7 @@ import (
 
 // ---- build -----------------------------------------------------------------
 
-func buildCloudflared(version string, repoDir string) error {
+func buildCloudflared(version string, sourceCommit string, repoDir string) error {
 	logf("cloning cloudflared " + version)
 
 	// version reaches git clone via runCmd below; reject anything that is not a
@@ -33,6 +33,9 @@ func buildCloudflared(version string, repoDir string) error {
 	if !cloudflaredVersionPattern.MatchString(version) {
 		err := fmt.Errorf("refusing to build unsafe cloudflared version %q", version)
 		slog.Error("unsafe cloudflared version", "err", err)
+		return err
+	}
+	if err := validateGitCommit(sourceCommit, "source commit"); err != nil {
 		return err
 	}
 
@@ -53,6 +56,21 @@ func buildCloudflared(version string, repoDir string) error {
 	); err != nil {
 		return fmt.Errorf("git clone: %w", err)
 	}
+	clonedCommit, err := gitHeadCommit(srcDir)
+	if err != nil {
+		return err
+	}
+	if clonedCommit != normalizedSourceCommit(sourceCommit) {
+		mismatch := fmt.Errorf(
+			"cloned cloudflared tag %s resolved to %s, want %s",
+			version,
+			clonedCommit,
+			normalizedSourceCommit(sourceCommit),
+		)
+		slog.Error("cloned cloudflared provenance check failed", "err", mismatch)
+		return mismatch
+	}
+	slog.Info("verified cloned cloudflared source", "version", version, "commit", clonedCommit)
 
 	if err := applyBuildPatches(repoDir, srcDir, version); err != nil {
 		return err
@@ -76,6 +94,26 @@ func buildCloudflared(version string, repoDir string) error {
 
 	logf(fmt.Sprintf("build complete: cloudflared %d bytes", info.Size()))
 	return nil
+}
+
+func gitHeadCommit(srcDir string) (string, error) {
+	output, err := exec.CommandContext(
+		context.Background(),
+		"git",
+		"-C",
+		srcDir,
+		"rev-parse",
+		"HEAD",
+	).Output()
+	if err != nil {
+		slog.Error("resolve cloned cloudflared commit failed", "err", err, "dir", srcDir)
+		return "", fmt.Errorf("resolve cloned cloudflared commit: %w", err)
+	}
+	commit := strings.TrimSpace(string(output))
+	if err := validateGitCommit(commit, "cloned source commit"); err != nil {
+		return "", err
+	}
+	return strings.ToLower(commit), nil
 }
 
 func applyBuildPatches(repoDir string, srcDir string, version string) error {
