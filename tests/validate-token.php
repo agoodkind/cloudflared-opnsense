@@ -5,19 +5,31 @@ require_once('/usr/local/opnsense/mvc/script/load_phalcon.php');
 
 use OPNsense\Cloudflared\Settings;
 
-if ($argc !== 3) {
-    throw new RuntimeException('Provide the plugin model file and a protected tunnel token file.');
+function fail_test(string $message): never
+{
+    fwrite(STDERR, $message . PHP_EOL);
+    exit(1);
 }
 
+if ($argc !== 3) {
+    fail_test('Provide the plugin model file and a protected tunnel token file.');
+}
+
+if (!is_file($argv[1]) || !is_readable($argv[1])) {
+    fail_test('Provide a readable plugin model file.');
+}
+if (!is_file($argv[2]) || !is_readable($argv[2])) {
+    fail_test('Provide a readable tunnel token file.');
+}
 require_once($argv[1]);
 
 $token = file_get_contents($argv[2]);
 if ($token === false) {
-    throw new RuntimeException('Cannot read the tunnel token file.');
+    fail_test('Cannot read the tunnel token file.');
 }
 $token = trim($token);
 if ($token === '') {
-    throw new RuntimeException('The tunnel token file is empty.');
+    fail_test('The tunnel token file is empty.');
 }
 
 $settings = new Settings();
@@ -26,13 +38,13 @@ $settings->general->mode = 'token';
 $settings->general->token = $token;
 
 if (count($settings->validate(null, '', true)) !== 0) {
-    throw new RuntimeException('The plugin rejected the Cloudflare tunnel token.');
+    fail_test('The plugin rejected the Cloudflare tunnel token.');
 }
 
 $settings->general->token = 'not a tunnel token';
 $messages = $settings->validate(null, '', true);
 if (!isset($messages['general.token'])) {
-    throw new RuntimeException('The plugin accepted invalid token text.');
+    fail_test('The plugin accepted invalid token text.');
 }
 
 fwrite(STDOUT, "The plugin accepts the Cloudflare token and rejects invalid token text.\n");
