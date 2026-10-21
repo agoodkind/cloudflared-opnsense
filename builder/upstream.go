@@ -122,7 +122,9 @@ func resolveUpstreamRelease(version string) (upstreamRelease, error) {
 
 	commit := strings.ToLower(tag.Object.SHA)
 	var comparison githubCompare
-	comparePath := "/repos/" + cloudflaredRepoSlug + "/compare/" + commit + "...master"
+	// GitHub includes file patches only on the first comparison page.
+	// Request the next page to verify ancestry without downloading those patches.
+	comparePath := "/repos/" + cloudflaredRepoSlug + "/compare/" + commit + "...master?per_page=1&page=2"
 	compareData, err := readGitHubAPI(comparePath)
 	if err != nil {
 		slog.Error("compare cloudflared release commit failed", "err", err)

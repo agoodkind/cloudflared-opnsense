@@ -80,6 +80,16 @@ on any OPNsense release regardless of its FreeBSD base.
 The publish job requires `CF_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. GitHub
 releases use tags in the form `<cloudflared-version>-freebsd-r<revision>`.
 
+## Publish an older version
+
+Run the **Build FreeBSD packages** workflow manually and enter the Cloudflare
+release tag in **version**, such as `2026.9.2`. The workflow builds that version
+and publishes downloadable GitHub release packages without changing the
+OPNsense update catalog or GitHub's latest release.
+
+Leave **version** blank to use the normal publishing process for the latest
+Cloudflare release. Scheduled builds also use the latest release.
+
 ## Troubleshoot delivery
 
 Inspect recent workflow runs and releases before rebuilding or republishing:

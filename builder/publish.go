@@ -22,7 +22,7 @@ import (
 
 // ---- publish ---------------------------------------------------------------
 
-func createGitHubRelease(version string, revision int, sourceCommit string, repoDir string) error {
+func createGitHubRelease(version string, revision int, sourceCommit string, repoDir string, releaseOnly bool) error {
 	pkgVersion := fmt.Sprintf("%s_%d", version, revision)
 	tag := version + "-freebsd-r" + strconv.Itoa(revision)
 	pluginPkg := filepath.Join(pkgRepoDir, "All", pluginName+"-"+pkgVersion+".pkg")
@@ -30,10 +30,12 @@ func createGitHubRelease(version string, revision int, sourceCommit string, repo
 
 	logf("creating GitHub release " + tag)
 
-	// Delete existing release/tag if present.
-	_ = runCmd(repoDir, "gh", "release", "delete", tag, "-y")
-	_ = runCmd(repoDir, "git", "push", "--delete", "origin", tag)
-	_ = runCmd(repoDir, "git", "tag", "-d", tag)
+	if !releaseOnly {
+		// Replace an existing tag only during normal repository publication.
+		_ = runCmd(repoDir, "gh", "release", "delete", tag, "-y")
+		_ = runCmd(repoDir, "git", "push", "--delete", "origin", tag)
+		_ = runCmd(repoDir, "git", "tag", "-d", tag)
+	}
 
 	notes := fmt.Sprintf(
 		"Cloudflared %s packages for FreeBSD\n\n"+
@@ -43,12 +45,20 @@ func createGitHubRelease(version string, revision int, sourceCommit string, repo
 		version, sourceCommit, version, pluginName, pkgVersion,
 	)
 
-	return runCmd(repoDir, "gh", "release", "create", tag,
+	if releaseOnly {
+		notes += "\n\n" + releaseOnlyMarker
+	}
+	args := []string{
+		"release", "create", tag,
 		"--title", fmt.Sprintf("Cloudflared %s packages for FreeBSD (revision %d)", version, revision),
 		"--notes", notes,
 		binaryPkg,
 		pluginPkg,
-	)
+	}
+	if releaseOnly {
+		args = append(args, "--latest=false")
+	}
+	return runCmd(repoDir, "gh", args...)
 }
 
 func publishRepositoryMetadata(repoDir string) error {
@@ -235,8 +245,9 @@ func emptyOr(s, dflt string) string {
 // repoSlug is the GitHub repository whose releases the publish decision compares
 // against. r2Bucket is the Cloudflare R2 bucket that serves the pkg repository.
 const (
-	repoSlug = "agoodkind/cloudflared-opnsense"
-	r2Bucket = "cloudflared-opnsense-pkg"
+	repoSlug          = "agoodkind/cloudflared-opnsense"
+	r2Bucket          = "cloudflared-opnsense-pkg"
+	releaseOnlyMarker = "<!-- cloudflared-release-only -->"
 
 	// maxManifestBytes caps +MANIFEST reads so a crafted package cannot drive an
 	// unbounded allocation when decompressed.
@@ -252,10 +263,10 @@ const (
 	pluginPkg
 )
 
-// ghReleaseListItem matches the JSON shape from `gh release list --json tagName`
-// (camelCase), distinct from the api.github.com tag_name field.
+// ghReleaseListItem contains a published release tag from each API page.
 type ghReleaseListItem struct {
-	TagName string `json:"tagName"`
+	TagName string `json:"tag_name"`
+	Body    string `json:"body"`
 }
 
 // publishDecision is the outcome of comparing freshly built packages against the
@@ -278,7 +289,7 @@ func cmdPlan(cfg *config) error {
 	}
 	v := release.Version
 
-	highest, err := highestExistingRevision(v, cfg.repoDir)
+	highest, _, err := publishedRevisions(v, cfg.repoDir)
 	if err != nil {
 		return err
 	}
@@ -407,41 +418,49 @@ func normalizedManifestFingerprint(pkgPath string, kind pkgKind) (string, error)
 	return fingerprintManifest(manifest)
 }
 
-// highestExistingRevision returns the largest revision already released for the
-// given upstream version, or 0 if none exists. GitHub release tags are the
-// authoritative source of truth.
-func highestExistingRevision(version, repoDir string) (int, error) {
+// publishedRevisions returns the highest release revision and the highest
+// revision that published the package repository for an upstream version.
+func publishedRevisions(version, repoDir string) (int, int, error) {
 	out, err := listPublishedReleases(repoDir)
 	if err != nil {
-		return 0, err
-	}
-
-	var releases []ghReleaseListItem
-	if err := json.Unmarshal([]byte(out), &releases); err != nil {
-		slog.Error("parse release list failed", "err", err)
-		return 0, fmt.Errorf("parse release list: %w", err)
+		return 0, 0, err
 	}
 
 	prefix := version + "-freebsd-r"
 	highest := 0
-	for _, release := range releases {
-		if !strings.HasPrefix(release.TagName, prefix) {
-			continue
+	highestRepository := 0
+	decoder := json.NewDecoder(strings.NewReader(out))
+	for {
+		var releases []ghReleaseListItem
+		if err := decoder.Decode(&releases); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			slog.Error("parse release list failed", "err", err)
+			return 0, 0, fmt.Errorf("parse release list: %w", err)
 		}
-		revision, convErr := strconv.Atoi(strings.TrimPrefix(release.TagName, prefix))
-		if convErr != nil {
-			continue
-		}
-		if revision > highest {
-			highest = revision
+		for _, release := range releases {
+			if !strings.HasPrefix(release.TagName, prefix) {
+				continue
+			}
+			revision, convErr := strconv.Atoi(strings.TrimPrefix(release.TagName, prefix))
+			if convErr != nil {
+				continue
+			}
+			if revision > highest {
+				highest = revision
+			}
+			if !strings.Contains(release.Body, releaseOnlyMarker) && revision > highestRepository {
+				highestRepository = revision
+			}
 		}
 	}
-	return highest, nil
+	return highest, highestRepository, nil
 }
 
 var listPublishedReleases = func(repoDir string) (string, error) {
-	return runCmdOutput(repoDir, "gh", "release", "list",
-		"--repo", repoSlug, "--limit", "100", "--json", "tagName")
+	return runCmdOutput(repoDir, "gh", "api", "--paginate",
+		"repos/"+repoSlug+"/releases?per_page=100")
 }
 
 // releaseManifestFingerprint downloads one asset from a release and returns its
@@ -467,7 +486,7 @@ func releaseManifestFingerprint(tag, filename string, kind pkgKind, repoDir stri
 // no prior release for the version, or when either package's normalized content
 // changed. It fails closed: a prior release whose assets cannot be downloaded or
 // hashed is an error rather than a silent publish.
-func decidePublish(version string, revision int, repoDir string) (publishDecision, error) {
+func decidePublish(version string, revision int, repoDir string, releaseOnly bool) (publishDecision, error) {
 	var decision publishDecision
 
 	pkgVersion := version + "_" + strconv.Itoa(revision)
@@ -483,7 +502,7 @@ func decidePublish(version string, revision int, repoDir string) (publishDecisio
 		return decision, fmt.Errorf("plugin package not found: %w", err)
 	}
 
-	highest, err := highestExistingRevision(version, repoDir)
+	highest, highestRepository, err := publishedRevisions(version, repoDir)
 	if err != nil {
 		return decision, err
 	}
@@ -492,6 +511,9 @@ func decidePublish(version string, revision int, repoDir string) (publishDecisio
 			highest, version, revision)
 		slog.Error("stale revision", "err", staleErr)
 		return decision, staleErr
+	}
+	if !releaseOnly {
+		highest = highestRepository
 	}
 	if highest == 0 {
 		decision.shouldPublish = true
