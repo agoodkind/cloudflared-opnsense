@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Cloudflare version to publish as download-only packages (leave blank for latest)"
+        required: false
+        type: string
   pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
@@ -32,7 +37,9 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
-        run: cd builder && go run . -repo-dir "${GITHUB_WORKSPACE}" plan
+          REQUESTED_VERSION: ${{ inputs.version }}
+          RELEASE_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+        run: cd builder && go run . -repo-dir "${GITHUB_WORKSPACE}" -version "${REQUESTED_VERSION}" -release-only="${RELEASE_ONLY}" plan
 
   test:
     runs-on: ubuntu-latest
@@ -165,6 +172,7 @@ jobs:
       VERSION: ${{ needs.check.outputs.version }}
       REVISION: ${{ needs.check.outputs.revision }}
       SOURCE_COMMIT: ${{ needs.check.outputs.source_commit }}
+      RELEASE_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -195,6 +203,7 @@ jobs:
             -revision "${REVISION}" \
             -repo-dir "${GITHUB_WORKSPACE}" \
             -pkg-repo-dir _artifact \
+            -release-only="${RELEASE_ONLY}" \
             -check-only publish
 
       - name: Skip publish
@@ -202,7 +211,7 @@ jobs:
         run: |
           echo "Skipping publish: ${{ steps.publish_decision.outputs.publish_reason }}"
 
-      - name: Publish to R2 and create the GitHub release
+      - name: Publish packages
         if: steps.publish_decision.outputs.should_publish == 'true'
         run: |
           dist/cloudflared-builder \
@@ -211,6 +220,7 @@ jobs:
             -revision "${REVISION}" \
             -repo-dir "${GITHUB_WORKSPACE}" \
             -pkg-repo-dir _artifact \
+            -release-only="${RELEASE_ONLY}" \
             publish
 
   preview-publish:

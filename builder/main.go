@@ -72,6 +72,7 @@ func main() {
 	workDirFlag := fs.String("work-dir", workDir, "scratch directory for builds")
 	pkgRepoDirFlag := fs.String("pkg-repo-dir", pkgRepoDir, "directory for pkg repository output")
 	checkOnly := fs.Bool("check-only", false, "publish: decide and emit outputs only, skip upload and release")
+	releaseOnly := fs.Bool("release-only", false, "publish: create a GitHub release without changing the package repository or latest release")
 	preview := fs.Bool("preview", false, "publish: round-trip packages through a throwaway prefix (upload, verify, delete); never release")
 	previewPrefix := fs.String("preview-prefix", "", "publish: key prefix for -preview objects (for example previews/pr-12)")
 
@@ -92,6 +93,7 @@ func main() {
 		revision:      *revisionFlag,
 		repoDir:       *repoDir,
 		checkOnly:     *checkOnly,
+		releaseOnly:   *releaseOnly,
 		preview:       *preview,
 		previewPrefix: *previewPrefix,
 	}
@@ -102,6 +104,10 @@ func main() {
 	pkgRepoDir = *pkgRepoDirFlag
 
 	var err error
+	if cfg.releaseOnly && command(args[0]) != commandPublish && command(args[0]) != commandPlan {
+		fmt.Fprintln(os.Stderr, "-release-only requires the plan or publish command")
+		os.Exit(1)
+	}
 
 	switch command(args[0]) {
 	case commandCheck:
@@ -143,7 +149,7 @@ var errUpToDate = errors.New("already up-to-date")
 func printUsage() {
 	fmt.Fprintln(os.Stderr,
 		"usage: cloudflared-builder [-force] [-version v] [-source-commit sha] [-revision n] [-repo-dir d]"+
-			" [-check-only] [-preview] [-preview-prefix p]"+
+			" [-check-only] [-release-only] [-preview] [-preview-prefix p]"+
 			" <check|plan|build|package|repo|publish|run>")
 }
 
@@ -177,6 +183,7 @@ type config struct {
 	revision      int // 0 = derive from state files
 	repoDir       string
 	checkOnly     bool   // publish: decide and emit outputs only, skip upload and release
+	releaseOnly   bool   // publish: create downloadable assets without updating the package repository
 	preview       bool   // publish: round-trip through a throwaway prefix, never release
 	previewPrefix string // publish: key prefix for preview objects
 }
@@ -217,6 +224,12 @@ func (c *config) resolve() (version string, revision int, err error) {
 // validatePublishFlags rejects flag combinations that would silently change the
 // publish behavior, so a misconfigured CI step or local run fails loudly.
 func (c *config) validatePublishFlags() error {
+	if c.releaseOnly && c.version == "" {
+		return errors.New("publish: -release-only requires -version")
+	}
+	if c.releaseOnly && c.preview {
+		return errors.New("publish: -release-only and -preview are mutually exclusive")
+	}
 	if c.preview && c.checkOnly {
 		return errors.New("publish: -preview and -check-only are mutually exclusive")
 	}
@@ -300,7 +313,7 @@ func cmdPublish(cfg *config) error {
 		return fmt.Errorf("publish provenance check: %w", err)
 	}
 
-	decision, err := decidePublish(v, rev, cfg.repoDir)
+	decision, err := decidePublish(v, rev, cfg.repoDir, cfg.releaseOnly)
 	if err != nil {
 		return err
 	}
@@ -330,11 +343,16 @@ func cmdPublish(cfg *config) error {
 		slog.Error("pre-upload provenance check failed", "err", err)
 		return fmt.Errorf("publish provenance recheck: %w", err)
 	}
-	if err := uploadToR2(pkgFiles, pkgRepoDir); err != nil {
+	if !cfg.releaseOnly {
+		if err := uploadToR2(pkgFiles, pkgRepoDir); err != nil {
+			return err
+		}
+	}
+	if err := createGitHubRelease(v, rev, cfg.sourceCommit, cfg.repoDir, cfg.releaseOnly); err != nil {
 		return err
 	}
-	if err := createGitHubRelease(v, rev, cfg.sourceCommit, cfg.repoDir); err != nil {
-		return err
+	if cfg.releaseOnly {
+		return nil
 	}
 	saveState(v, rev)
 	return nil
@@ -388,7 +406,7 @@ func cmdRun(cfg *config) error {
 	if err := verifyUpstreamRelease(v, sourceCommit); err != nil {
 		return fmt.Errorf("publish provenance check: %w", err)
 	}
-	if err := createGitHubRelease(v, rev, sourceCommit, cfg.repoDir); err != nil {
+	if err := createGitHubRelease(v, rev, sourceCommit, cfg.repoDir, false); err != nil {
 		logf(fmt.Sprintf("WARNING: GitHub release failed: %v (continuing)", err))
 	}
 	if err := updatePkgRepository(v, rev); err != nil {
