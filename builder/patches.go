@@ -80,6 +80,7 @@ func loadPatchManifest(path string) (patchManifest, error) {
 		slog.Error("validate patch manifest failed", "err", err, "path", path)
 		return patchManifest{}, err
 	}
+
 	return manifest, nil
 }
 
@@ -93,18 +94,24 @@ func patchManifestFromTOML(decoded patchManifestTOML) patchManifest {
 		if decodedPatch.Strip != nil {
 			strip = *decodedPatch.Strip
 		}
+
 		appliesTo := decodedPatch.AppliesTo
 		if appliesTo == "" {
 			appliesTo = "*"
 		}
-		manifest.Patches = append(manifest.Patches, patchSpec{
-			ID:        decodedPatch.ID,
-			File:      decodedPatch.File,
-			Git:       decodedPatch.Git,
-			Strip:     strip,
-			AppliesTo: appliesTo,
-		})
+
+		manifest.Patches = append(
+			manifest.Patches,
+			patchSpec{
+				ID:        decodedPatch.ID,
+				File:      decodedPatch.File,
+				Git:       decodedPatch.Git,
+				Strip:     strip,
+				AppliesTo: appliesTo,
+			},
+		)
 	}
+
 	return manifest
 }
 
@@ -117,18 +124,28 @@ func selectPatches(manifest patchManifest, upstreamVersion string) ([]patchSpec,
 			patches = append(patches, patch)
 			continue
 		}
+
 		if versionErr != nil {
 			continue
 		}
+
 		constraint, err := semver.NewConstraint(patch.AppliesTo)
 		if err != nil {
 			slog.Error("parse patch version constraint failed", "err", err, "id", patch.ID)
-			return nil, fmt.Errorf("parse patch %q applies_to %q: %w", patch.ID, patch.AppliesTo, err)
+
+			return nil, fmt.Errorf(
+				"parse patch %q applies_to %q: %w",
+				patch.ID,
+				patch.AppliesTo,
+				err,
+			)
 		}
+
 		if constraint.Check(version) {
 			patches = append(patches, patch)
 		}
 	}
+
 	return patches, nil
 }
 
@@ -146,22 +163,27 @@ func validatePatchManifest(manifest patchManifest) error {
 		if patch.ID == "" {
 			return fmt.Errorf("patch id must not be empty")
 		}
+
 		if _, exists := ids[patch.ID]; exists {
 			return fmt.Errorf("patch id %q is duplicated", patch.ID)
 		}
+
 		ids[patch.ID] = struct{}{}
 
 		if err := validatePatchSource(patch); err != nil {
 			return err
 		}
+
 		if patch.Strip < 0 {
 			return fmt.Errorf("patch %q strip must not be negative", patch.ID)
 		}
+
 		if _, err := semver.NewConstraint(patch.AppliesTo); err != nil {
 			slog.Error("parse patch version constraint failed", "err", err, "id", patch.ID)
 			return fmt.Errorf("parse patch %q applies_to %q: %w", patch.ID, patch.AppliesTo, err)
 		}
 	}
+
 	return nil
 }
 
@@ -171,13 +193,16 @@ func validatePatchSource(patch patchSpec) error {
 	if hasFile == hasGit {
 		return fmt.Errorf("patch %q must declare exactly one source", patch.ID)
 	}
+
 	if hasGit {
 		if patch.Git.Remote == "" || strings.HasPrefix(patch.Git.Remote, "-") {
 			return fmt.Errorf("patch %q git remote %q is invalid", patch.ID, patch.Git.Remote)
 		}
+
 		if !validGitRef(patch.Git.Ref) {
 			return fmt.Errorf("patch %q git ref %q is invalid", patch.ID, patch.Git.Ref)
 		}
+
 		if !expectedCommitPattern.MatchString(patch.Git.ExpectedCommit) {
 			return fmt.Errorf(
 				"patch %q git expected_commit %q must be a full commit SHA",
@@ -185,32 +210,41 @@ func validatePatchSource(patch patchSpec) error {
 				patch.Git.ExpectedCommit,
 			)
 		}
+
 		return nil
 	}
+
 	if hasFile {
 		if !safeRelativePath(patch.File) {
 			return fmt.Errorf("patch %q file %q is not a safe relative path", patch.ID, patch.File)
 		}
+
 		return nil
 	}
+
 	return fmt.Errorf("patch %q has no supported source", patch.ID)
 }
 
 func validGitRef(ref string) bool {
-	if !strings.HasPrefix(ref, "refs/") || strings.HasSuffix(ref, "/") || strings.HasSuffix(ref, ".") {
+	if !strings.HasPrefix(ref, "refs/") || strings.HasSuffix(ref, "/") ||
+		strings.HasSuffix(ref, ".") {
 		return false
 	}
+
 	if strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "//") {
 		return false
 	}
+
 	if strings.ContainsAny(ref, " ~^:?*[\\") {
 		return false
 	}
+
 	for _, character := range ref {
 		if character < 0x20 || character == 0x7f {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -218,6 +252,7 @@ func safeRelativePath(path string) bool {
 	if path == "" || filepath.IsAbs(path) || !filepath.IsLocal(path) {
 		return false
 	}
+
 	return filepath.Clean(path) != "."
 }
 
@@ -238,23 +273,31 @@ func applyPatchManifest(repoDir string, sourceDir string, upstreamVersion string
 		if err != nil {
 			return err
 		}
+
 		disposition, err := applyPatchFile(sourceDir, patch, patchPath)
 		cleanup()
 		if err != nil {
 			return err
 		}
+
 		logf(fmt.Sprintf("patch %s: %s", patch.ID, disposition))
 	}
+
 	return nil
 }
 
-func materializePatchPath(manifestPath string, sourceDir string, spec patchSpec) (string, func(), error) {
+func materializePatchPath(
+	manifestPath string,
+	sourceDir string,
+	spec patchSpec,
+) (string, func(), error) {
 	if spec.Git != nil {
 		patchPath, cleanup, err := materializeGitPatch(sourceDir, spec)
 		if err != nil {
 			cleanup()
 			return "", func() {}, err
 		}
+
 		return patchPath, cleanup, nil
 	}
 
@@ -262,6 +305,7 @@ func materializePatchPath(manifestPath string, sourceDir string, spec patchSpec)
 	if err != nil {
 		return "", func() {}, err
 	}
+
 	return patchPath, func() {}, nil
 }
 
@@ -290,10 +334,16 @@ func materializeGitPatch(sourceDir string, spec patchSpec) (string, func(), erro
 		)
 	}
 
-	fetchedOutput, err := runPatchGitOutput(sourceDir, "rev-parse", "--verify", "FETCH_HEAD^{commit}")
+	fetchedOutput, err := runPatchGitOutput(
+		sourceDir,
+		"rev-parse",
+		"--verify",
+		"FETCH_HEAD^{commit}",
+	)
 	if err != nil {
 		return "", cleanup, fmt.Errorf("resolve fetched patch %q commit: %w", spec.ID, err)
 	}
+
 	fetchedCommit := strings.TrimSpace(fetchedOutput)
 	expectedCommit := strings.ToLower(spec.Git.ExpectedCommit)
 	if fetchedCommit != expectedCommit {
@@ -310,11 +360,17 @@ func materializeGitPatch(sourceDir string, spec patchSpec) (string, func(), erro
 	if err != nil {
 		return "", cleanup, fmt.Errorf("read patch %q parents: %w", spec.ID, err)
 	}
+
 	parents := strings.Fields(parentsOutput)
 	if len(parents) != 1 {
 		if len(parents) > 1 {
-			return "", cleanup, fmt.Errorf("patch %q commit %s is a merge commit", spec.ID, fetchedCommit)
+			return "", cleanup, fmt.Errorf(
+				"patch %q commit %s is a merge commit",
+				spec.ID,
+				fetchedCommit,
+			)
 		}
+
 		return "", cleanup, fmt.Errorf("patch %q commit %s has no parent", spec.ID, fetchedCommit)
 	}
 
@@ -322,6 +378,7 @@ func materializeGitPatch(sourceDir string, spec patchSpec) (string, func(), erro
 	if err != nil {
 		return "", cleanup, fmt.Errorf("create temporary patch for %q: %w", spec.ID, err)
 	}
+
 	patchPath := patchFile.Name()
 	cleanup = func() {
 		if err := os.Remove(patchPath); err != nil && !os.IsNotExist(err) {
@@ -333,15 +390,23 @@ func materializeGitPatch(sourceDir string, spec patchSpec) (string, func(), erro
 		return "", func() {}, fmt.Errorf("close temporary patch for %q: %w", spec.ID, err)
 	}
 
-	patchData, err := runPatchGitOutput(sourceDir, "diff", "--binary", fetchedCommit+"^", fetchedCommit)
+	patchData, err := runPatchGitOutput(
+		sourceDir,
+		"diff",
+		"--binary",
+		fetchedCommit+"^",
+		fetchedCommit,
+	)
 	if err != nil {
 		cleanup()
 		return "", func() {}, fmt.Errorf("export patch %q: %w", spec.ID, err)
 	}
+
 	if err := os.WriteFile(patchPath, []byte(patchData), 0o600); err != nil {
 		cleanup()
 		return "", func() {}, fmt.Errorf("write temporary patch for %q: %w", spec.ID, err)
 	}
+
 	return patchPath, cleanup, nil
 }
 
@@ -351,22 +416,40 @@ func resolveLocalPatchPath(manifestPath string, patch patchSpec) (string, error)
 		slog.Error("resolve patch manifest directory failed", "err", err, "id", patch.ID)
 		return "", fmt.Errorf("resolve patch %q manifest directory: %w", patch.ID, err)
 	}
+
 	configuredPath := filepath.Join(manifestDir, patch.File)
 	patchPath, err := filepath.EvalSymlinks(configuredPath)
 	if err != nil {
 		slog.Error("resolve patch file failed", "err", err, "id", patch.ID, "path", configuredPath)
 		return "", fmt.Errorf("resolve patch %q file %q: %w", patch.ID, patch.File, err)
 	}
+
 	relativePath, err := filepath.Rel(manifestDir, patchPath)
 	if err != nil {
 		slog.Error("resolve patch path failed", "err", err, "id", patch.ID)
 		return "", fmt.Errorf("resolve patch %q path: %w", patch.ID, err)
 	}
-	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) {
-		err := fmt.Errorf("patch %q file %q escapes the manifest directory through a symlink", patch.ID, patch.File)
-		slog.Error("resolve patch path rejected", "err", err, "id", patch.ID, "path", configuredPath)
+
+	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(relativePath) {
+		err := fmt.Errorf(
+			"patch %q file %q escapes the manifest directory through a symlink",
+			patch.ID,
+			patch.File,
+		)
+		slog.Error(
+			"resolve patch path rejected",
+			"err",
+			err,
+			"id",
+			patch.ID,
+			"path",
+			configuredPath,
+		)
+
 		return "", err
 	}
+
 	return patchPath, nil
 }
 
@@ -377,12 +460,27 @@ func applyPatchFile(sourceDir string, spec patchSpec, patchPath string) (patchDi
 		applyOutput, applyErr := runPatchGit(sourceDir, "apply", "--index", strip, "--", patchPath)
 		if applyErr != nil {
 			slog.Error("apply patch failed", "err", applyErr, "id", spec.ID, "path", patchPath)
-			return patchNotApplicable, fmt.Errorf("apply patch %q: %w\napply output:\n%s", spec.ID, applyErr, applyOutput)
+
+			return patchNotApplicable, fmt.Errorf(
+				"apply patch %q: %w\napply output:\n%s",
+				spec.ID,
+				applyErr,
+				applyOutput,
+			)
 		}
+
 		return patchApplied, nil
 	}
 
-	reverseOutput, reverseErr := runPatchGit(sourceDir, "apply", "--reverse", "--check", strip, "--", patchPath)
+	reverseOutput, reverseErr := runPatchGit(
+		sourceDir,
+		"apply",
+		"--reverse",
+		"--check",
+		strip,
+		"--",
+		patchPath,
+	)
 	if reverseErr == nil {
 		return patchAlreadyApplied, nil
 	}
@@ -402,8 +500,10 @@ func runPatchGit(sourceDir string, args ...string) (string, error) {
 	if err != nil {
 		commandError := fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 		slog.Warn("patch git command failed", "err", commandError, "source_dir", sourceDir)
+
 		return string(output), commandError
 	}
+
 	return string(output), nil
 }
 
@@ -417,7 +517,9 @@ func runPatchGitOutput(sourceDir string, args ...string) (string, error) {
 	if err := command.Run(); err != nil {
 		commandError := fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, stderr.String())
 		slog.Warn("patch git command failed", "err", commandError, "source_dir", sourceDir)
+
 		return stdout.String(), commandError
 	}
+
 	return stdout.String(), nil
 }

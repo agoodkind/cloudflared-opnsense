@@ -135,23 +135,29 @@ expected_commit = "834e9d1"
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			path := writePatchManifest(t, test.manifest)
-			_, err := loadPatchManifest(path)
-			if err == nil {
-				t.Fatal("loadPatchManifest() error = nil")
-			}
-			if !strings.Contains(err.Error(), test.wantErr) {
-				t.Fatalf("loadPatchManifest() error = %q, want %q", err, test.wantErr)
-			}
-		})
+		t.Run(
+			test.name,
+			func(t *testing.T) {
+				path := writePatchManifest(t, test.manifest)
+				_, err := loadPatchManifest(path)
+				if err == nil {
+					t.Fatal("loadPatchManifest() error = nil")
+				}
+
+				if !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("loadPatchManifest() error = %q, want %q", err, test.wantErr)
+				}
+			},
+		)
 	}
 }
 
 func TestLoadPatchManifestAcceptsGuardedGitSource(t *testing.T) {
 	t.Parallel()
 
-	path := writePatchManifest(t, `schema_version = 1
+	path := writePatchManifest(
+		t,
+		`schema_version = 1
 
 [[patches]]
 id = "upstream"
@@ -159,7 +165,8 @@ id = "upstream"
 remote = "https://github.com/cloudflare/cloudflared.git"
 ref = "refs/pull/1707/head"
 expected_commit = "834e9d1706d8bf53b83e66af64f4e9856321c2ff"
-`)
+`,
+	)
 	if _, err := loadPatchManifest(path); err != nil {
 		t.Fatalf("loadPatchManifest() error = %v", err)
 	}
@@ -194,18 +201,23 @@ applies_to = ">=2026.8.0"
 	if err != nil {
 		t.Fatalf("selectPatches() error = %v", err)
 	}
+
 	if len(patches) != 2 {
 		t.Fatalf("selectPatches() returned %d patches, want 2", len(patches))
 	}
+
 	if patches[0].ID != "all-versions" || patches[1].ID != "matching-range" {
 		t.Fatalf("selectPatches() ids = %q, %q", patches[0].ID, patches[1].ID)
 	}
+
 	if patches[0].Strip != 1 {
 		t.Fatalf("default strip = %d, want 1", patches[0].Strip)
 	}
+
 	if patches[0].AppliesTo != "*" {
 		t.Fatalf("default applies_to = %q, want *", patches[0].AppliesTo)
 	}
+
 	if patches[1].Strip != 0 {
 		t.Fatalf("strip = %d, want 0", patches[1].Strip)
 	}
@@ -214,7 +226,10 @@ applies_to = ">=2026.8.0"
 func TestSelectPatchesUsesOnlyVersionAgnosticPatchesForBranchRef(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := loadPatchManifest(writePatchManifest(t, `schema_version = 1
+	manifest, err := loadPatchManifest(
+		writePatchManifest(
+			t,
+			`schema_version = 1
 
 [[patches]]
 id = "all-versions"
@@ -224,7 +239,9 @@ file = "patches/all.patch"
 id = "released-versions"
 file = "patches/released.patch"
 applies_to = ">=2026.7.3"
-`))
+`,
+		),
+	)
 	if err != nil {
 		t.Fatalf("loadPatchManifest() error = %v", err)
 	}
@@ -233,6 +250,7 @@ applies_to = ">=2026.7.3"
 	if err != nil {
 		t.Fatalf("selectPatches() error = %v", err)
 	}
+
 	if len(patches) != 1 || patches[0].ID != "all-versions" {
 		t.Fatalf("selectPatches() = %#v, want all-versions only", patches)
 	}
@@ -245,6 +263,7 @@ func writePatchManifest(t *testing.T, content string) string {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write patch manifest: %v", err)
 	}
+
 	return path
 }
 
@@ -259,9 +278,11 @@ func TestApplyPatchFileAppliesAndSkipsExactReverse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("applyPatchFile() error = %v", err)
 	}
+
 	if disposition != patchApplied {
 		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchApplied)
 	}
+
 	if got := readPatchFile(t, filepath.Join(sourceDir, "message.txt")); got != "second\n" {
 		t.Fatalf("message.txt = %q, want %q", got, "second\n")
 	}
@@ -270,8 +291,13 @@ func TestApplyPatchFileAppliesAndSkipsExactReverse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("applyPatchFile() second error = %v", err)
 	}
+
 	if disposition != patchAlreadyApplied {
-		t.Fatalf("applyPatchFile() second disposition = %q, want %q", disposition, patchAlreadyApplied)
+		t.Fatalf(
+			"applyPatchFile() second disposition = %q, want %q",
+			disposition,
+			patchAlreadyApplied,
+		)
 	}
 }
 
@@ -291,9 +317,11 @@ func TestApplyPatchFileHonorsStripZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("applyPatchFile() error = %v", err)
 	}
+
 	if disposition != patchApplied {
 		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchApplied)
 	}
+
 	if got := readPatchFile(t, filepath.Join(sourceDir, "message.txt")); got != "second\n" {
 		t.Fatalf("message.txt = %q, want %q", got, "second\n")
 	}
@@ -305,10 +333,15 @@ func TestApplyPatchFileHandlesLeadingDashPath(t *testing.T) {
 	sourceDir := newPatchCheckout(t, "first\n")
 	writeGitPatchAt(t, sourceDir, filepath.Join(sourceDir, "-change.patch"), "second\n")
 
-	disposition, err := applyPatchFile(sourceDir, patchSpec{ID: "leading-dash", Strip: 1}, "-change.patch")
+	disposition, err := applyPatchFile(
+		sourceDir,
+		patchSpec{ID: "leading-dash", Strip: 1},
+		"-change.patch",
+	)
 	if err != nil {
 		t.Fatalf("applyPatchFile() error = %v", err)
 	}
+
 	if disposition != patchApplied {
 		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchApplied)
 	}
@@ -325,13 +358,19 @@ func TestApplyPatchFileReportsForwardAndReverseDiagnosticsForDrift(t *testing.T)
 		t.Fatalf("write patch: %v", err)
 	}
 
-	disposition, err := applyPatchFile(sourceDir, patchSpec{ID: "rename-message", Strip: 1}, patchPath)
+	disposition, err := applyPatchFile(
+		sourceDir,
+		patchSpec{ID: "rename-message", Strip: 1},
+		patchPath,
+	)
 	if err == nil {
 		t.Fatal("applyPatchFile() error = nil")
 	}
+
 	if disposition != patchNotApplicable {
 		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchNotApplicable)
 	}
+
 	for _, want := range []string{
 		`patch "rename-message"`,
 		"forward check:",
@@ -361,7 +400,10 @@ func TestApplyPatchManifestAppliesLocalPatchesInDeclarationOrder(t *testing.T) {
 	writeGitPatchAt(t, sourceDir, secondPatch, "third\n")
 	runGit(t, sourceDir, "reset", "--hard", "HEAD")
 
-	writeManifestAt(t, repoDir, `schema_version = 1
+	writeManifestAt(
+		t,
+		repoDir,
+		`schema_version = 1
 
 [[patches]]
 id = "first"
@@ -370,11 +412,13 @@ file = "patches/first.patch"
 [[patches]]
 id = "second"
 file = "patches/second.patch"
-`)
+`,
+	)
 
 	if err := applyPatchManifest(repoDir, sourceDir, "2026.7.3"); err != nil {
 		t.Fatalf("applyPatchManifest() error = %v", err)
 	}
+
 	if got := readPatchFile(t, filepath.Join(sourceDir, "message.txt")); got != "third\n" {
 		t.Fatalf("message.txt = %q, want %q", got, "third\n")
 	}
@@ -395,17 +439,23 @@ func TestApplyPatchManifestRejectsPatchSymlinkEscape(t *testing.T) {
 	if err := os.Symlink(targetPatch, escapingPatch); err != nil {
 		t.Fatalf("create patch symlink: %v", err)
 	}
-	writeManifestAt(t, repoDir, `schema_version = 1
+
+	writeManifestAt(
+		t,
+		repoDir,
+		`schema_version = 1
 
 [[patches]]
 id = "escape"
 file = "patches/escape.patch"
-`)
+`,
+	)
 
 	err := applyPatchManifest(repoDir, sourceDir, "2026.7.3")
 	if err == nil {
 		t.Fatal("applyPatchManifest() error = nil")
 	}
+
 	if !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("applyPatchManifest() error = %q, want symlink", err)
 	}
@@ -419,7 +469,11 @@ func TestFindRepoDirSkipsNestedBuilderModule(t *testing.T) {
 	if err := os.MkdirAll(builderDir, 0o755); err != nil {
 		t.Fatalf("create builder directory: %v", err)
 	}
-	for _, path := range []string{filepath.Join(repoDir, "go.mod"), filepath.Join(builderDir, "go.mod")} {
+
+	for _, path := range []string{
+		filepath.Join(repoDir, "go.mod"),
+		filepath.Join(builderDir, "go.mod"),
+	} {
 		if err := os.WriteFile(path, []byte("module fixture\n"), 0o600); err != nil {
 			t.Fatalf("write module marker: %v", err)
 		}
@@ -449,15 +503,18 @@ func TestMaterializeGitPatchAppliesOneCommitFromMatchingMutableRef(t *testing.T)
 	if err != nil {
 		t.Fatalf("materializeGitPatch() error = %v", err)
 	}
+
 	t.Cleanup(cleanup)
 
 	disposition, err := applyPatchFile(sourceDir, spec, patchPath)
 	if err != nil {
 		t.Fatalf("applyPatchFile() error = %v", err)
 	}
+
 	if disposition != patchApplied {
 		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchApplied)
 	}
+
 	if got := readPatchFile(t, filepath.Join(sourceDir, "message.txt")); got != "second\n" {
 		t.Fatalf("message.txt = %q, want %q", got, "second\n")
 	}
@@ -481,12 +538,14 @@ func TestMaterializeGitPatchKeepsGitDiagnosticsOutOfPatchData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("materializeGitPatch() error = %v", err)
 	}
+
 	t.Cleanup(cleanup)
 
 	disposition, err := applyPatchFile(sourceDir, spec, patchPath)
 	if err != nil {
 		t.Fatalf("applyPatchFile() error = %v", err)
 	}
+
 	if disposition != patchApplied {
 		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchApplied)
 	}
@@ -513,12 +572,14 @@ func TestMaterializeGitPatchAcceptsAnnotatedTagRef(t *testing.T) {
 	if err != nil {
 		t.Fatalf("materializeGitPatch() error = %v", err)
 	}
+
 	t.Cleanup(cleanup)
 
 	disposition, err := applyPatchFile(sourceDir, spec, patchPath)
 	if err != nil {
 		t.Fatalf("applyPatchFile() error = %v", err)
 	}
+
 	if disposition != patchApplied {
 		t.Fatalf("applyPatchFile() disposition = %q, want %q", disposition, patchApplied)
 	}
@@ -545,6 +606,7 @@ func TestMaterializeGitPatchRejectsMovedMutableRef(t *testing.T) {
 	if err == nil {
 		t.Fatal("materializeGitPatch() error = nil")
 	}
+
 	for _, want := range []string{expectedCommit, actualCommit, "moved"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("materializeGitPatch() error = %q, want %q", err, want)
@@ -583,6 +645,7 @@ func TestMaterializeGitPatchRejectsMergeCommit(t *testing.T) {
 	if err == nil {
 		t.Fatal("materializeGitPatch() error = nil")
 	}
+
 	if !strings.Contains(err.Error(), "merge") {
 		t.Fatalf("materializeGitPatch() error = %q, want merge", err)
 	}
@@ -607,6 +670,7 @@ func TestMaterializeGitPatchReportsFetchFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("materializeGitPatch() error = nil")
 	}
+
 	if !strings.Contains(err.Error(), "fetch") {
 		t.Fatalf("materializeGitPatch() error = %q, want fetch", err)
 	}
@@ -631,9 +695,11 @@ func TestMaterializeGitPatchCleanupRemovesTemporaryDiff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("materializeGitPatch() error = %v", err)
 	}
+
 	if _, err := os.Stat(patchPath); err != nil {
 		t.Fatalf("stat materialized patch: %v", err)
 	}
+
 	cleanup()
 	if _, err := os.Stat(patchPath); !os.IsNotExist(err) {
 		t.Fatalf("stat materialized patch after cleanup = %v, want not exist", err)
@@ -650,7 +716,12 @@ func TestApplyPatchManifestAppliesGuardedGitPatch(t *testing.T) {
 	if err := os.MkdirAll(patchDir, 0o755); err != nil {
 		t.Fatalf("create patch directory: %v", err)
 	}
-	writeManifestAt(t, repoDir, fmt.Sprintf(`schema_version = 1
+
+	writeManifestAt(
+		t,
+		repoDir,
+		fmt.Sprintf(
+			`schema_version = 1
 
 [[patches]]
 id = "guarded-upstream-patch"
@@ -659,11 +730,16 @@ strip = 1
 remote = %q
 ref = "refs/heads/patch"
 expected_commit = %q
-`, remoteDir, commit))
+`,
+			remoteDir,
+			commit,
+		),
+	)
 
 	if err := applyPatchManifest(repoDir, sourceDir, "2026.7.3"); err != nil {
 		t.Fatalf("applyPatchManifest() error = %v", err)
 	}
+
 	if got := readPatchFile(t, filepath.Join(sourceDir, "message.txt")); got != "second\n" {
 		t.Fatalf("message.txt = %q, want %q", got, "second\n")
 	}
@@ -676,11 +752,17 @@ func newPatchCheckout(t *testing.T, contents string) string {
 	runGit(t, sourceDir, "init", "--initial-branch=patch-tests")
 	runGit(t, sourceDir, "config", "user.email", "alex@goodkind.io")
 	runGit(t, sourceDir, "config", "user.name", "Alexander Goodkind")
-	if err := os.WriteFile(filepath.Join(sourceDir, "message.txt"), []byte(contents), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(sourceDir, "message.txt"),
+		[]byte(contents),
+		0o600,
+	); err != nil {
 		t.Fatalf("write message: %v", err)
 	}
+
 	runGit(t, sourceDir, "add", "message.txt")
 	runGit(t, sourceDir, "commit", "-m", "add message")
+
 	return sourceDir
 }
 
@@ -698,6 +780,7 @@ func newRemotePatchRepository(t *testing.T, contents string) (string, string, st
 	sourceParent := t.TempDir()
 	sourceDir := filepath.Join(sourceParent, "source")
 	runGit(t, sourceParent, "clone", remoteDir, sourceDir)
+
 	return remoteDir, upstreamDir, sourceDir
 }
 
@@ -709,10 +792,16 @@ func commitRemotePatch(t *testing.T, remoteDir string, ref string, contents stri
 	runGit(t, upstreamDir, "config", "user.email", "alex@goodkind.io")
 	runGit(t, upstreamDir, "config", "user.name", "Alexander Goodkind")
 	runGit(t, upstreamDir, "checkout", "-b", "patch-work", "origin/main")
+
 	return commitAndPushRemotePatch(t, upstreamDir, ref, contents)
 }
 
-func commitAndPushRemotePatch(t *testing.T, upstreamDir string, ref string, contents string) string {
+func commitAndPushRemotePatch(
+	t *testing.T,
+	upstreamDir string,
+	ref string,
+	contents string,
+) string {
 	t.Helper()
 
 	writeRemoteFile(t, upstreamDir, "message.txt", contents)
@@ -720,6 +809,7 @@ func commitAndPushRemotePatch(t *testing.T, upstreamDir string, ref string, cont
 	runGit(t, upstreamDir, "commit", "-m", "update message")
 	commit := strings.TrimSpace(runGit(t, upstreamDir, "rev-parse", "HEAD"))
 	runGit(t, upstreamDir, "push", "origin", "HEAD:"+ref)
+
 	return commit
 }
 
@@ -741,14 +831,21 @@ func writeGitPatch(t *testing.T, sourceDir string, contents string) string {
 func writeGitPatchAt(t *testing.T, sourceDir string, patchPath string, contents string) string {
 	t.Helper()
 
-	if err := os.WriteFile(filepath.Join(sourceDir, "message.txt"), []byte(contents), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(sourceDir, "message.txt"),
+		[]byte(contents),
+		0o600,
+	); err != nil {
 		t.Fatalf("update message: %v", err)
 	}
+
 	patch := runGit(t, sourceDir, "diff", "--binary", "--", "message.txt")
 	if err := os.WriteFile(patchPath, []byte(patch), 0o600); err != nil {
 		t.Fatalf("write patch: %v", err)
 	}
+
 	runGit(t, sourceDir, "checkout", "--", "message.txt")
+
 	return patchPath
 }
 
@@ -768,6 +865,7 @@ func readPatchFile(t *testing.T, path string) string {
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
+
 	return string(data)
 }
 
@@ -783,14 +881,11 @@ func runGit(t *testing.T, sourceDir string, args ...string) string {
 		"tag.gpgsign=false",
 	}
 	command := exec.Command("git", append(commandArgs, args...)...)
-	command.Env = append(
-		os.Environ(),
-		"GIT_CONFIG_GLOBAL=/dev/null",
-		"GIT_CONFIG_SYSTEM=/dev/null",
-	)
+	command.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
 	}
+
 	return string(output)
 }

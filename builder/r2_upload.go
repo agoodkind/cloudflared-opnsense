@@ -53,6 +53,7 @@ func uploadToR2(pkgFiles []string, metadataDir string) error {
 	if err != nil {
 		return err
 	}
+
 	token, err := requiredCloudflareAPIToken()
 	if err != nil {
 		return err
@@ -63,6 +64,7 @@ func uploadToR2(pkgFiles []string, metadataDir string) error {
 	if err != nil {
 		return err
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), r2UploadTimeout)
 	defer cancel()
 
@@ -74,8 +76,10 @@ func requiredR2AccountID() (string, error) {
 	if !r2AccountIDPattern.MatchString(accountID) {
 		invalid := fmt.Errorf("%s is missing or malformed", cloudflareAccountIDEnv)
 		slog.Error("invalid R2 account id", "err", invalid)
+
 		return "", invalid
 	}
+
 	return accountID, nil
 }
 
@@ -84,8 +88,10 @@ func requiredCloudflareAPIToken() (string, error) {
 	if token == "" {
 		err := fmt.Errorf("%s is required for Cloudflare SDK R2 uploads", cloudflareAPITokenEnv)
 		slog.Error("missing Cloudflare API token", "err", err)
+
 		return "", err
 	}
+
 	return token, nil
 }
 
@@ -97,17 +103,25 @@ func r2Uploads(pkgFiles []string, metadataDir string) ([]r2Upload, error) {
 
 	uploads := make([]r2Upload, 0, len(pkgFiles)+len(metadataPaths))
 	for _, src := range pkgFiles {
-		uploads = append(uploads, r2Upload{
-			sourcePath: src,
-			objectKey:  "All/" + filepath.Base(src),
-		})
+		uploads = append(
+			uploads,
+			r2Upload{
+				sourcePath: src,
+				objectKey:  "All/" + filepath.Base(src),
+			},
+		)
 	}
+
 	for _, src := range metadataPaths {
-		uploads = append(uploads, r2Upload{
-			sourcePath: src,
-			objectKey:  filepath.Base(src),
-		})
+		uploads = append(
+			uploads,
+			r2Upload{
+				sourcePath: src,
+				objectKey:  filepath.Base(src),
+			},
+		)
 	}
+
 	return uploads, nil
 }
 
@@ -123,7 +137,9 @@ func uploadR2Objects(
 			return err
 		}
 	}
+
 	logf("R2 upload complete")
+
 	return nil
 }
 
@@ -136,19 +152,38 @@ func uploadR2Object(
 ) error {
 	file, err := os.Open(upload.sourcePath)
 	if err != nil {
-		slog.ErrorContext(ctx, "open R2 upload source failed", "err", err, "path", upload.sourcePath)
+		slog.ErrorContext(
+			ctx,
+			"open R2 upload source failed",
+			"err",
+			err,
+			"path",
+			upload.sourcePath,
+		)
+
 		return fmt.Errorf("open %s: %w", upload.sourcePath, err)
 	}
+
 	defer func() { _ = file.Close() }()
 
 	info, err := file.Stat()
 	if err != nil {
-		slog.ErrorContext(ctx, "stat R2 upload source failed", "err", err, "path", upload.sourcePath)
+		slog.ErrorContext(
+			ctx,
+			"stat R2 upload source failed",
+			"err",
+			err,
+			"path",
+			upload.sourcePath,
+		)
+
 		return fmt.Errorf("stat %s: %w", upload.sourcePath, err)
 	}
+
 	if info.IsDir() {
 		return fmt.Errorf("upload %s: source is a directory", upload.sourcePath)
 	}
+
 	if info.Size() > maxR2ControlPlaneUploadBytes {
 		return fmt.Errorf(
 			"upload %s: object is %d bytes, above Cloudflare R2 control-plane limit %d",
@@ -158,12 +193,19 @@ func uploadR2Object(
 		)
 	}
 
-	_, err = uploader.Upload(ctx, bucketName, upload.objectKey, file, r2.BucketObjectUploadParams{
-		AccountID: cloudflare.F(accountID),
-	})
+	_, err = uploader.Upload(
+		ctx,
+		bucketName,
+		upload.objectKey,
+		file,
+		r2.BucketObjectUploadParams{
+			AccountID: cloudflare.F(accountID),
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("upload %s to R2 key %s: %w", upload.sourcePath, upload.objectKey, err)
 	}
+
 	return nil
 }
 
@@ -206,6 +248,7 @@ func previewPublishToR2(pkgFiles []string, metadataDir, keyPrefix string) error 
 	if err != nil {
 		return err
 	}
+
 	token, err := requiredCloudflareAPIToken()
 	if err != nil {
 		return err
@@ -216,6 +259,7 @@ func previewPublishToR2(pkgFiles []string, metadataDir, keyPrefix string) error 
 	if err != nil {
 		return err
 	}
+
 	uploads = prefixedUploads(uploads, keyPrefix)
 
 	ctx, cancel := context.WithTimeout(context.Background(), r2UploadTimeout)
@@ -231,6 +275,7 @@ func prefixedUploads(uploads []r2Upload, keyPrefix string) []r2Upload {
 	if trimmed == "" {
 		return uploads
 	}
+
 	prefixed := make([]r2Upload, len(uploads))
 	for i, upload := range uploads {
 		prefixed[i] = r2Upload{
@@ -238,6 +283,7 @@ func prefixedUploads(uploads []r2Upload, keyPrefix string) []r2Upload {
 			objectKey:  trimmed + "/" + upload.objectKey,
 		}
 	}
+
 	return prefixed
 }
 
@@ -257,18 +303,32 @@ func roundTripR2Objects(
 		if len(uploadedKeys) == 0 {
 			return
 		}
+
 		// Detach from the caller's cancellation for cleanup: ctx may already be
 		// canceled or timed out (a likely failure mode), and reusing it would
 		// make the deletes fail immediately and leave preview objects behind.
 		// WithoutCancel keeps context values while dropping that cancellation.
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r2UploadTimeout)
 		defer cancel()
+
 		for _, key := range uploadedKeys {
-			_, err := client.Delete(cleanupCtx, bucketName, key, r2.BucketObjectDeleteParams{
-				AccountID: cloudflare.F(accountID),
-			})
+			_, err := client.Delete(
+				cleanupCtx,
+				bucketName,
+				key,
+				r2.BucketObjectDeleteParams{
+					AccountID: cloudflare.F(accountID),
+				},
+			)
 			if err != nil {
-				slog.WarnContext(cleanupCtx, "preview cleanup delete failed", "err", err, "key", key)
+				slog.WarnContext(
+					cleanupCtx,
+					"preview cleanup delete failed",
+					"err",
+					err,
+					"key",
+					key,
+				)
 			}
 		}
 	}()
@@ -277,16 +337,20 @@ func roundTripR2Objects(
 		if err := uploadR2Object(ctx, client, accountID, bucketName, upload); err != nil {
 			return err
 		}
+
 		uploadedKeys = append(uploadedKeys, upload.objectKey)
 		if err := verifyR2Object(ctx, client, accountID, bucketName, upload.objectKey); err != nil {
 			return err
 		}
 	}
 
-	logf(fmt.Sprintf(
-		"R2 preview round-trip: %d objects uploaded and verified; deleting on return",
-		len(uploads),
-	))
+	logf(
+		fmt.Sprintf(
+			"R2 preview round-trip: %d objects uploaded and verified; deleting on return",
+			len(uploads),
+		),
+	)
+
 	return nil
 }
 
@@ -298,19 +362,34 @@ func verifyR2Object(
 	bucketName string,
 	objectKey string,
 ) error {
-	resp, err := getter.Get(ctx, bucketName, objectKey, r2.BucketObjectGetParams{
-		AccountID: cloudflare.F(accountID),
-	})
+	resp, err := getter.Get(
+		ctx,
+		bucketName,
+		objectKey,
+		r2.BucketObjectGetParams{
+			AccountID: cloudflare.F(accountID),
+		},
+	)
 	if err != nil {
 		slog.ErrorContext(ctx, "read back preview object failed", "err", err, "key", objectKey)
 		return fmt.Errorf("verify preview object %s: %w", objectKey, err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		statusErr := fmt.Errorf("verify preview object %s: status %d", objectKey, resp.StatusCode)
-		slog.ErrorContext(ctx, "preview object read back non-OK status", "err", statusErr, "key", objectKey)
+		slog.ErrorContext(
+			ctx,
+			"preview object read back non-OK status",
+			"err",
+			statusErr,
+			"key",
+			objectKey,
+		)
+
 		return statusErr
 	}
+
 	return nil
 }

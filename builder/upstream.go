@@ -64,6 +64,7 @@ func resolveUpstreamRelease(version string) (upstreamRelease, error) {
 		if !cloudflaredVersionPattern.MatchString(version) {
 			return upstreamRelease{}, fmt.Errorf("unsafe cloudflared version %q", version)
 		}
+
 		releasePath = "/repos/" + cloudflaredRepoSlug + "/releases/tags/" + url.PathEscape(version)
 	}
 
@@ -73,10 +74,12 @@ func resolveUpstreamRelease(version string) (upstreamRelease, error) {
 		slog.Error("resolve cloudflared release failed", "err", err)
 		return upstreamRelease{}, fmt.Errorf("resolve cloudflared release: %w", err)
 	}
+
 	if err := json.Unmarshal(releaseData, &release); err != nil {
 		slog.Error("decode cloudflared release failed", "err", err)
 		return upstreamRelease{}, fmt.Errorf("decode cloudflared release: %w", err)
 	}
+
 	if err := validateGitHubRelease(release, version); err != nil {
 		return upstreamRelease{}, err
 	}
@@ -88,13 +91,20 @@ func resolveUpstreamRelease(version string) (upstreamRelease, error) {
 		slog.Error("resolve cloudflared tag ref failed", "err", err)
 		return upstreamRelease{}, fmt.Errorf("resolve cloudflared tag ref: %w", err)
 	}
+
 	if err := json.Unmarshal(refData, &ref); err != nil {
 		slog.Error("decode cloudflared tag ref failed", "err", err)
 		return upstreamRelease{}, fmt.Errorf("decode cloudflared tag ref: %w", err)
 	}
+
 	if ref.Object.Type != "tag" {
-		return upstreamRelease{}, fmt.Errorf("cloudflared tag %q is %q, want annotated tag", release.TagName, ref.Object.Type)
+		return upstreamRelease{}, fmt.Errorf(
+			"cloudflared tag %q is %q, want annotated tag",
+			release.TagName,
+			ref.Object.Type,
+		)
 	}
+
 	if err := validateGitCommit(ref.Object.SHA, "tag object"); err != nil {
 		return upstreamRelease{}, err
 	}
@@ -106,17 +116,13 @@ func resolveUpstreamRelease(version string) (upstreamRelease, error) {
 		slog.Error("resolve annotated cloudflared tag failed", "err", err)
 		return upstreamRelease{}, fmt.Errorf("resolve annotated cloudflared tag: %w", err)
 	}
+
 	if err := json.Unmarshal(tagData, &tag); err != nil {
 		slog.Error("decode annotated cloudflared tag failed", "err", err)
 		return upstreamRelease{}, fmt.Errorf("decode annotated cloudflared tag: %w", err)
 	}
-	if !strings.HasSuffix(strings.ToLower(tag.Tagger.Email), "@cloudflare.com") {
-		return upstreamRelease{}, fmt.Errorf("cloudflared tagger email %q is not a cloudflare.com address", tag.Tagger.Email)
-	}
-	if tag.Object.Type != "commit" {
-		return upstreamRelease{}, fmt.Errorf("cloudflared tag target is %q, want commit", tag.Object.Type)
-	}
-	if err := validateGitCommit(tag.Object.SHA, "release commit"); err != nil {
+
+	if err := validateAnnotatedTag(tag); err != nil {
 		return upstreamRelease{}, err
 	}
 
@@ -128,12 +134,18 @@ func resolveUpstreamRelease(version string) (upstreamRelease, error) {
 	compareData, err := readGitHubAPI(comparePath)
 	if err != nil {
 		slog.Error("compare cloudflared release commit failed", "err", err)
-		return upstreamRelease{}, fmt.Errorf("compare cloudflared release commit to master: %w", err)
+
+		return upstreamRelease{}, fmt.Errorf(
+			"compare cloudflared release commit to master: %w",
+			err,
+		)
 	}
+
 	if err := json.Unmarshal(compareData, &comparison); err != nil {
 		slog.Error("decode cloudflared comparison failed", "err", err)
 		return upstreamRelease{}, fmt.Errorf("decode cloudflared comparison: %w", err)
 	}
+
 	if comparison.Status != "ahead" && comparison.Status != "identical" {
 		return upstreamRelease{}, fmt.Errorf(
 			"cloudflared master comparison is %q, want ahead or identical",
@@ -144,13 +156,30 @@ func resolveUpstreamRelease(version string) (upstreamRelease, error) {
 	return upstreamRelease{Version: release.TagName, Commit: commit}, nil
 }
 
+func validateAnnotatedTag(tag githubAnnotatedTag) error {
+	if !strings.HasSuffix(strings.ToLower(tag.Tagger.Email), "@cloudflare.com") {
+		return fmt.Errorf(
+			"cloudflared tagger email %q is not a cloudflare.com address",
+			tag.Tagger.Email,
+		)
+	}
+
+	if tag.Object.Type != "commit" {
+		return fmt.Errorf("cloudflared tag target is %q, want commit", tag.Object.Type)
+	}
+
+	return validateGitCommit(tag.Object.SHA, "release commit")
+}
+
 func validateGitHubRelease(release githubRelease, requestedVersion string) error {
 	if release.TagName == "" {
 		return errors.New("cloudflared release has an empty tag_name")
 	}
+
 	if !cloudflaredVersionPattern.MatchString(release.TagName) {
 		return fmt.Errorf("unsafe cloudflared release tag %q", release.TagName)
 	}
+
 	if requestedVersion != "" && release.TagName != requestedVersion {
 		return fmt.Errorf(
 			"cloudflared release tag is %q, want %q",
@@ -158,6 +187,7 @@ func validateGitHubRelease(release githubRelease, requestedVersion string) error
 			requestedVersion,
 		)
 	}
+
 	if release.Author.Login != cloudflaredReleaseAuthor {
 		return fmt.Errorf(
 			"cloudflared release author is %q, want %q",
@@ -165,6 +195,7 @@ func validateGitHubRelease(release githubRelease, requestedVersion string) error
 			cloudflaredReleaseAuthor,
 		)
 	}
+
 	return nil
 }
 
@@ -172,10 +203,12 @@ func verifyUpstreamRelease(version string, expectedCommit string) error {
 	if err := validateGitCommit(expectedCommit, "source commit"); err != nil {
 		return err
 	}
+
 	release, err := resolveUpstreamRelease(version)
 	if err != nil {
 		return err
 	}
+
 	if release.Commit != strings.ToLower(expectedCommit) {
 		return fmt.Errorf(
 			"cloudflared release %s now resolves to %s, want %s",
@@ -184,6 +217,7 @@ func verifyUpstreamRelease(version string, expectedCommit string) error {
 			strings.ToLower(expectedCommit),
 		)
 	}
+
 	return nil
 }
 
@@ -191,6 +225,7 @@ func validateGitCommit(commit string, name string) error {
 	if !gitCommitPattern.MatchString(commit) {
 		return fmt.Errorf("%s %q is not a 40-character Git commit", name, commit)
 	}
+
 	return nil
 }
 
@@ -205,6 +240,7 @@ func readGitHubAPI(path string) ([]byte, error) {
 		slog.Error("build GitHub API request failed", "err", err, "path", path)
 		return nil, fmt.Errorf("build GitHub API request: %w", err)
 	}
+
 	request.Header.Set("Accept", "application/vnd.github+json")
 	request.Header.Set("X-Github-Api-Version", "2022-11-28")
 	if token := os.Getenv("GH_TOKEN"); token != "" {
@@ -216,14 +252,17 @@ func readGitHubAPI(path string) ([]byte, error) {
 		slog.Error("request GitHub API failed", "err", err, "path", path)
 		return nil, fmt.Errorf("request GitHub API: %w", err)
 	}
+
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d for %s", response.StatusCode, path)
 	}
+
 	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
 		slog.Error("read GitHub API response failed", "err", err, "path", path)
 		return nil, fmt.Errorf("read GitHub API response for %s: %w", path, err)
 	}
+
 	return body, nil
 }

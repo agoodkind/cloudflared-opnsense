@@ -33,8 +33,10 @@ func buildCloudflared(version string, sourceCommit string, repoDir string) error
 	if !cloudflaredVersionPattern.MatchString(version) {
 		err := fmt.Errorf("refusing to build unsafe cloudflared version %q", version)
 		slog.Error("unsafe cloudflared version", "err", err)
+
 		return err
 	}
+
 	if err := validateGitCommit(sourceCommit, "source commit"); err != nil {
 		return err
 	}
@@ -43,6 +45,7 @@ func buildCloudflared(version string, sourceCommit string, repoDir string) error
 		slog.Error("create work dir failed", "err", err, "path", workDir)
 		return fmt.Errorf("mkdir %s: %w", workDir, err)
 	}
+
 	srcDir := filepath.Join(workDir, "cloudflared")
 
 	if err := os.RemoveAll(srcDir); err != nil {
@@ -50,16 +53,24 @@ func buildCloudflared(version string, sourceCommit string, repoDir string) error
 		return fmt.Errorf("remove %s: %w", srcDir, err)
 	}
 
-	if err := runCmd(workDir, "git", "clone",
-		"--depth", "1", "--branch", version,
+	if err := runCmd(
+		workDir,
+		"git",
+		"clone",
+		"--depth",
+		"1",
+		"--branch",
+		version,
 		"https://github.com/cloudflare/cloudflared.git",
 	); err != nil {
 		return fmt.Errorf("git clone: %w", err)
 	}
+
 	clonedCommit, err := gitHeadCommit(srcDir)
 	if err != nil {
 		return err
 	}
+
 	if clonedCommit != normalizedSourceCommit(sourceCommit) {
 		mismatch := fmt.Errorf(
 			"cloned cloudflared tag %s resolved to %s, want %s",
@@ -68,8 +79,10 @@ func buildCloudflared(version string, sourceCommit string, repoDir string) error
 			normalizedSourceCommit(sourceCommit),
 		)
 		slog.Error("cloned cloudflared provenance check failed", "err", mismatch)
+
 		return mismatch
 	}
+
 	slog.Info("verified cloned cloudflared source", "version", version, "commit", clonedCommit)
 
 	if err := applyBuildPatches(repoDir, srcDir, version); err != nil {
@@ -82,7 +95,13 @@ func buildCloudflared(version string, sourceCommit string, repoDir string) error
 	}
 
 	logf("compiling")
-	if err := runCmdWithEnv(srcDir, map[string]string{}, "gmake", "DATE="+buildDate, "cloudflared"); err != nil {
+	if err := runCmdWithEnv(
+		srcDir,
+		map[string]string{},
+		"gmake",
+		"DATE="+buildDate,
+		"cloudflared",
+	); err != nil {
 		return fmt.Errorf("gmake: %w", err)
 	}
 
@@ -93,6 +112,7 @@ func buildCloudflared(version string, sourceCommit string, repoDir string) error
 	}
 
 	logf(fmt.Sprintf("build complete: cloudflared %d bytes", info.Size()))
+
 	return nil
 }
 
@@ -109,10 +129,12 @@ func gitHeadCommit(srcDir string) (string, error) {
 		slog.Error("resolve cloned cloudflared commit failed", "err", err, "dir", srcDir)
 		return "", fmt.Errorf("resolve cloned cloudflared commit: %w", err)
 	}
+
 	commit := strings.TrimSpace(string(output))
 	if err := validateGitCommit(commit, "cloned source commit"); err != nil {
 		return "", err
 	}
+
 	return strings.ToLower(commit), nil
 }
 
@@ -122,6 +144,7 @@ func applyBuildPatches(repoDir string, srcDir string, version string) error {
 		slog.Error("apply patch manifest failed", "err", err, "version", version)
 		return fmt.Errorf("apply patch manifest: %w", err)
 	}
+
 	return nil
 }
 
@@ -131,8 +154,15 @@ func applyBuildPatches(repoDir string, srcDir string, version string) error {
 var cloudflaredVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 func cloudflaredBuildDate(srcDir string) (string, error) {
-	raw, err := exec.CommandContext(context.Background(),
-		"git", "-C", srcDir, "show", "-s", "--format=%cI", "HEAD",
+	raw, err := exec.CommandContext(
+		context.Background(),
+		"git",
+		"-C",
+		srcDir,
+		"show",
+		"-s",
+		"--format=%cI",
+		"HEAD",
 	).Output()
 	if err != nil {
 		slog.Error("git show failed", "err", err, "dir", srcDir)
@@ -164,6 +194,7 @@ func createBinaryPackage(cfVersion, repoDir string) error {
 		slog.Error("create bin staging failed", "err", err, "path", binDst)
 		return fmt.Errorf("mkdir %s: %w", binDst, err)
 	}
+
 	if err := copyFile(
 		filepath.Join(workDir, "cloudflared", "cloudflared"),
 		filepath.Join(binDst, "cloudflared"),
@@ -179,6 +210,7 @@ func createBinaryPackage(cfVersion, repoDir string) error {
 		slog.Error("read manifest failed", "err", err)
 		return fmt.Errorf("read +MANIFEST: %w", err)
 	}
+
 	rendered := strings.ReplaceAll(string(manifest), "{{version}}", cfVersion)
 	parsedManifest, err := parseUCLManifest(rendered)
 	if err != nil {
@@ -206,8 +238,12 @@ func createBinaryPackage(cfVersion, repoDir string) error {
 
 	pkgFile := filepath.Join(outDir, "cloudflared-"+cfVersion+".pkg")
 	if err := createPkgArchive(
-		pkgFile, staging, plistPath,
-		parsedManifest, string(desc), scripts,
+		pkgFile,
+		staging,
+		plistPath,
+		parsedManifest,
+		string(desc),
+		scripts,
 	); err != nil {
 		return fmt.Errorf("create binary package: %w", err)
 	}
@@ -216,10 +252,13 @@ func createBinaryPackage(cfVersion, repoDir string) error {
 	if err != nil {
 		return fmt.Errorf("binary package not found: %s", pkgFile)
 	}
+
 	if info.Size() < 10_000_000 {
 		return fmt.Errorf("binary package too small (%d bytes)", info.Size())
 	}
+
 	logf(fmt.Sprintf("binary package: %s (%d bytes)", pkgFile, info.Size()))
+
 	return nil
 }
 
@@ -251,7 +290,9 @@ func createPluginPackage(cfVersion string, revision int, repoDir string) error {
 	if _, err := os.Stat(dstPkg); err != nil {
 		return fmt.Errorf("plugin package not found: %s", dstPkg)
 	}
+
 	logf("plugin package: " + dstPkg)
+
 	return nil
 }
 
@@ -274,6 +315,7 @@ func packageMakeCommand() string {
 	if _, err := exec.LookPath("bmake"); err == nil {
 		return "bmake"
 	}
+
 	return "make"
 }
 
@@ -302,21 +344,26 @@ func parsePlist(path string) (files []string, dirs []string, err error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+
 		if dir, ok := strings.CutPrefix(line, "@dir "); ok {
 			dirs = append(dirs, strings.TrimSpace(dir))
 			continue
 		}
+
 		if sample, ok := strings.CutPrefix(line, "@sample "); ok {
 			line = strings.TrimSpace(sample)
 		} else if shadow, ok := strings.CutPrefix(line, "@shadow "); ok {
 			line = strings.TrimSpace(shadow)
 		}
+
 		files = append(files, line)
 	}
+
 	if err := scanner.Err(); err != nil {
 		slog.Error("scan plist failed", "err", err, "path", path)
 		return nil, nil, fmt.Errorf("scan %s: %w", path, err)
 	}
+
 	return files, dirs, nil
 }
 
@@ -330,50 +377,55 @@ func sha256File(path string) (string, error) {
 	}
 	defer f.Close()
 
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
 		slog.Error("hash file failed", "err", err, "path", path)
 		return "", fmt.Errorf("hash %s: %w", path, err)
 	}
-	return "1$" + hex.EncodeToString(h.Sum(nil)), nil
+
+	return "1$" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 // jsonRawFromString encodes a string as a [json.RawMessage]. Marshaling a string
 // cannot fail; an impossible failure falls back to a JSON null so the manifest
 // stays well-formed.
 func jsonRawFromString(s string) json.RawMessage {
-	b, err := json.Marshal(s)
+	encodedJSON, err := json.Marshal(s)
 	if err != nil {
 		slog.Error("encode string value failed", "err", err)
 		return json.RawMessage("null")
 	}
-	return b
+
+	return encodedJSON
 }
 
 // jsonRawFromStringMap encodes a map[string]string as a [json.RawMessage].
 func jsonRawFromStringMap(m map[string]string) json.RawMessage {
-	b, err := json.Marshal(m)
+	encodedJSON, err := json.Marshal(m)
 	if err != nil {
 		slog.Error("encode map value failed", "err", err)
 		return json.RawMessage("null")
 	}
-	return b
+
+	return encodedJSON
 }
 
 // jsonRawFromInt64 encodes an int64 as a [json.RawMessage].
 func jsonRawFromInt64(n int64) json.RawMessage {
-	b, err := json.Marshal(n)
+	encodedJSON, err := json.Marshal(n)
 	if err != nil {
 		slog.Error("encode int value failed", "err", err)
 		return json.RawMessage("null")
 	}
-	return b
+
+	return encodedJSON
 }
 
 func plistAbsPath(prefix, entry string) string {
 	if strings.HasPrefix(entry, "/") {
 		return entry
 	}
+
 	return prefix + "/" + entry
 }
 
@@ -390,18 +442,25 @@ func manifestPrefix(m map[string]json.RawMessage) string {
 	if !ok {
 		return prefix
 	}
+
 	var p string
 	if err := json.Unmarshal(raw, &p); err == nil && p != "" {
 		prefix = p
 	}
+
 	return prefix
 }
 
 // hashStagedFiles computes the legacy file-hash map and total flatsize for the
 // plist entries, reading each file from the staging directory.
-func hashStagedFiles(stagingDir, prefix string, plistFiles []string) (map[string]string, int64, error) {
+func hashStagedFiles(
+	stagingDir string,
+	prefix string,
+	plistFiles []string,
+) (map[string]string, int64, error) {
 	filesMap := make(map[string]string)
 	var flatsize int64
+
 	for _, relPath := range plistFiles {
 		absPath := plistAbsPath(prefix, relPath)
 		diskPath := stagingPathForAbs(stagingDir, absPath)
@@ -410,6 +469,7 @@ func hashStagedFiles(stagingDir, prefix string, plistFiles []string) (map[string
 			slog.Error("hash staged file failed", "err", err, "path", absPath)
 			return nil, 0, fmt.Errorf("hash %s: %w", absPath, err)
 		}
+
 		filesMap[absPath] = hash
 
 		info, err := os.Stat(diskPath)
@@ -417,8 +477,10 @@ func hashStagedFiles(stagingDir, prefix string, plistFiles []string) (map[string
 			slog.Error("stat staged file failed", "err", err, "path", absPath)
 			return nil, 0, fmt.Errorf("stat %s: %w", absPath, err)
 		}
+
 		flatsize += info.Size()
 	}
+
 	return filesMap, flatsize, nil
 }
 
@@ -428,11 +490,13 @@ func hashStagedFiles(stagingDir, prefix string, plistFiles []string) (map[string
 func buildManifestMap(
 	m map[string]json.RawMessage,
 	desc string,
-	scripts, filesMap map[string]string,
+	scripts map[string]string,
+	filesMap map[string]string,
 	plistDirs []string,
 	flatsize int64,
 ) map[string]json.RawMessage {
 	dirsMap := make(map[string]string)
+
 	for _, d := range plistDirs {
 		dirsMap[d] = "y"
 	}
@@ -442,6 +506,7 @@ func buildManifestMap(
 	if len(dirsMap) > 0 {
 		m["directories"] = jsonRawFromStringMap(dirsMap)
 	}
+
 	m["desc"] = jsonRawFromString(strings.TrimRight(desc, "\n"))
 	if len(scripts) > 0 {
 		m["scripts"] = jsonRawFromStringMap(scripts)
@@ -453,9 +518,11 @@ func buildManifestMap(
 	if _, ok := m["abi"]; !ok {
 		m["abi"] = jsonRawFromString("FreeBSD:*:*")
 	}
+
 	if _, ok := m["arch"]; !ok {
 		m["arch"] = jsonRawFromString("freebsd:*:*")
 	}
+
 	return m
 }
 
@@ -468,6 +535,7 @@ func compactManifestMap(m map[string]json.RawMessage) map[string]json.RawMessage
 			compact[k] = v
 		}
 	}
+
 	return compact
 }
 
@@ -475,9 +543,12 @@ func compactManifestMap(m map[string]json.RawMessage) map[string]json.RawMessage
 // entries into the tar writer.
 func writeTarContent(
 	tw *tar.Writer,
-	stagingDir, prefix string,
-	plistFiles, plistDirs []string,
-	fullManifest, compactManifest []byte,
+	stagingDir string,
+	prefix string,
+	plistFiles []string,
+	plistDirs []string,
+	fullManifest []byte,
+	compactManifest []byte,
 ) error {
 	writeMeta := func(name string, data []byte) error {
 		hdr := &tar.Header{Name: name, Size: int64(len(data)), Mode: 0o644}
@@ -485,21 +556,25 @@ func writeTarContent(
 			slog.Error("write manifest header failed", "err", err, "name", name)
 			return fmt.Errorf("write tar header %s: %w", name, err)
 		}
+
 		if _, err := tw.Write(data); err != nil {
 			slog.Error("write manifest body failed", "err", err, "name", name)
 			return fmt.Errorf("write tar body %s: %w", name, err)
 		}
+
 		return nil
 	}
 
 	if err := writeMeta("+COMPACT_MANIFEST", compactManifest); err != nil {
 		return err
 	}
+
 	if err := writeMeta("+MANIFEST", fullManifest); err != nil {
 		return err
 	}
 
 	sort.Strings(plistFiles)
+
 	for _, relPath := range plistFiles {
 		if err := writeStagedFile(tw, stagingDir, prefix, relPath); err != nil {
 			return err
@@ -507,12 +582,14 @@ func writeTarContent(
 	}
 
 	sort.Strings(plistDirs)
+
 	for _, d := range plistDirs {
 		hdr := &tar.Header{Name: d + "/", Typeflag: tar.TypeDir, Mode: 0o755}
 		if err := tw.WriteHeader(hdr); err != nil {
 			return fmt.Errorf("write tar dir %s: %w", d, err)
 		}
 	}
+
 	return nil
 }
 
@@ -527,6 +604,7 @@ func writeStagedFile(tw *tar.Writer, stagingDir, prefix, relPath string) error {
 		slog.Error("stat staged file failed", "err", err, "path", diskPath)
 		return fmt.Errorf("stat %s: %w", diskPath, err)
 	}
+
 	hdr := &tar.Header{
 		Name: filepath.ToSlash(absPath),
 		Size: info.Size(),
@@ -542,12 +620,14 @@ func writeStagedFile(tw *tar.Writer, stagingDir, prefix, relPath string) error {
 		slog.Error("open staged file failed", "err", err, "path", diskPath)
 		return fmt.Errorf("open %s: %w", diskPath, err)
 	}
+
 	_, copyErr := io.Copy(tw, f)
 	f.Close()
 	if copyErr != nil {
 		slog.Error("copy staged file failed", "err", copyErr, "path", diskPath)
 		return fmt.Errorf("copy %s: %w", diskPath, copyErr)
 	}
+
 	return nil
 }
 
@@ -581,6 +661,7 @@ func createPkgArchive(
 		slog.Error("marshal manifest failed", "err", err)
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
+
 	compactManifest, err := json.Marshal(compactManifestMap(m))
 	if err != nil {
 		slog.Error("marshal compact manifest failed", "err", err)
@@ -604,7 +685,15 @@ func createPkgArchive(
 	tw := tar.NewWriter(zw)
 	defer tw.Close()
 
-	return writeTarContent(tw, stagingDir, prefix, plistFiles, plistDirs, fullManifest, compactManifest)
+	return writeTarContent(
+		tw,
+		stagingDir,
+		prefix,
+		plistFiles,
+		plistDirs,
+		fullManifest,
+		compactManifest,
+	)
 }
 
 // ---- pkg repository --------------------------------------------------------
@@ -624,6 +713,7 @@ func updatePkgRepository(cfVersion string, revision int) error {
 		if e.Name() == pluginPkgName+".pkg" || e.Name() == binaryPkgName+".pkg" {
 			continue
 		}
+
 		if strings.HasSuffix(e.Name(), ".pkg") {
 			if err := os.Remove(filepath.Join(allDir, e.Name())); err != nil {
 				slog.Warn("remove stale package failed", "err", err, "name", e.Name())
@@ -636,5 +726,6 @@ func updatePkgRepository(cfVersion string, revision int) error {
 	}
 
 	logf("repository metadata updated")
+
 	return nil
 }
