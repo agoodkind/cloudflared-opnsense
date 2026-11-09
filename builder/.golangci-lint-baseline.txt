@@ -1,4 +1,4 @@
-# golangci-lint: generated_at=2026-11-09T02:51:51Z
+# golangci-lint: generated_at=2026-11-09T17:11:49Z
 build_pkg.go:72:2: missing whitespace below this line (after-block) (wsl_v5)	# golangci-lint:first_added=2026-11-09T02:51:51Z last_seen=2026-11-09T02:51:51Z
 build_pkg.go:96:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-09T02:51:51Z
 build_pkg.go:436:2: missing whitespace above this line (no shared variables above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-09T02:51:51Z
