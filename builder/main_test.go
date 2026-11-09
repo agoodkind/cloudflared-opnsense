@@ -18,21 +18,27 @@ import (
 func Test_emptyOr(t *testing.T) {
 	t.Parallel()
 
-	t.Run("empty string returns default", func(t *testing.T) {
-		t.Parallel()
-		got := emptyOr("", "default")
-		if got != "default" {
-			t.Fatalf("emptyOr(\"\"): got %q want %q", got, "default")
-		}
-	})
+	t.Run(
+		"empty string returns default",
+		func(t *testing.T) {
+			t.Parallel()
+			got := emptyOr("", "default")
+			if got != "default" {
+				t.Fatalf("emptyOr(\"\"): got %q want %q", got, "default")
+			}
+		},
+	)
 
-	t.Run("non-empty string returns value", func(t *testing.T) {
-		t.Parallel()
-		got := emptyOr("x", "default")
-		if got != "x" {
-			t.Fatalf("emptyOr(\"x\"): got %q want %q", got, "x")
-		}
-	})
+	t.Run(
+		"non-empty string returns value",
+		func(t *testing.T) {
+			t.Parallel()
+			got := emptyOr("x", "default")
+			if got != "x" {
+				t.Fatalf("emptyOr(\"x\"): got %q want %q", got, "x")
+			}
+		},
+	)
 }
 
 func Test_pluginPackagePaths(t *testing.T) {
@@ -42,6 +48,7 @@ func Test_pluginPackagePaths(t *testing.T) {
 	if src != filepath.Join("/repo", "work", "pkg", "os-cloudflared-2026.6.0_1.pkg") {
 		t.Fatalf("src = %q", src)
 	}
+
 	if dst != filepath.Join("/out", "os-cloudflared-2026.6.0_1.pkg") {
 		t.Fatalf("dst = %q", dst)
 	}
@@ -50,13 +57,16 @@ func Test_pluginPackagePaths(t *testing.T) {
 func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 	t.Parallel()
 
-	ucl := strings.Join([]string{
-		"name: os-cloudflared",
-		"deps: {",
-		`    cloudflared: { version: "2026.6.0", origin: "net/cloudflared" }`,
-		"}",
-		"",
-	}, "\n")
+	ucl := strings.Join(
+		[]string{
+			"name: os-cloudflared",
+			"deps: {",
+			`    cloudflared: { version: "2026.6.0", origin: "net/cloudflared" }`,
+			"}",
+			"",
+		},
+		"\n",
+	)
 
 	manifest, err := parseUCLManifest(ucl)
 	if err != nil {
@@ -80,9 +90,11 @@ func Test_parseUCLManifestPreservesInlineDeps(t *testing.T) {
 	if !ok {
 		t.Fatalf("deps = %v, want cloudflared", deps)
 	}
+
 	if dependency.Version != "2026.6.0" {
 		t.Fatalf("cloudflared version = %q, want 2026.6.0", dependency.Version)
 	}
+
 	if dependency.Origin != cloudflaredPackageOrigin {
 		t.Fatalf("cloudflared origin = %q, want %s", dependency.Origin, cloudflaredPackageOrigin)
 	}
@@ -107,6 +119,7 @@ func Test_parseUCLManifestParsesBinaryTemplate(t *testing.T) {
 	if err := json.Unmarshal(manifest["categories"], &categories); err != nil {
 		t.Fatalf("categories unmarshal: %v", err)
 	}
+
 	if len(categories) != 1 || categories[0] != "net" {
 		t.Fatalf("categories = %v", categories)
 	}
@@ -115,6 +128,7 @@ func Test_parseUCLManifestParsesBinaryTemplate(t *testing.T) {
 	if err := json.Unmarshal(manifest["licenses"], &licenses); err != nil {
 		t.Fatalf("licenses unmarshal: %v", err)
 	}
+
 	if len(licenses) != 1 || licenses[0] != "Apache-2.0" {
 		t.Fatalf("licenses = %v", licenses)
 	}
@@ -123,6 +137,7 @@ func Test_parseUCLManifestParsesBinaryTemplate(t *testing.T) {
 	if err := json.Unmarshal(manifest["abi"], &abi); err != nil {
 		t.Fatalf("abi unmarshal: %v", err)
 	}
+
 	if abi != "FreeBSD:*:*" {
 		t.Fatalf("abi = %q, want FreeBSD:*:* so the package installs across FreeBSD majors", abi)
 	}
@@ -131,6 +146,7 @@ func Test_parseUCLManifestParsesBinaryTemplate(t *testing.T) {
 	if err := json.Unmarshal(manifest["arch"], &arch); err != nil {
 		t.Fatalf("arch unmarshal: %v", err)
 	}
+
 	if arch != "freebsd:*:*" {
 		t.Fatalf("arch = %q, want lowercase freebsd:*:* to match pkg canonical form", arch)
 	}
@@ -161,6 +177,7 @@ annotations {
 	if err := json.Unmarshal(manifest["name"], &name); err != nil {
 		t.Fatalf("name unmarshal: %v", err)
 	}
+
 	if name != "os-cloudflared" {
 		t.Fatalf("name = %v", name)
 	}
@@ -169,6 +186,7 @@ annotations {
 	if err := json.Unmarshal(manifest["www"], &www); err != nil {
 		t.Fatalf("www unmarshal: %v", err)
 	}
+
 	if www != "https://goodkind.io" {
 		t.Fatalf("www = %v", www)
 	}
@@ -177,6 +195,7 @@ annotations {
 	if err := json.Unmarshal(manifest["categories"], &categories); err != nil {
 		t.Fatalf("categories unmarshal: %v", err)
 	}
+
 	if len(categories) != 1 || categories[0] != "net" {
 		t.Fatalf("categories = %v", categories)
 	}
@@ -185,12 +204,15 @@ annotations {
 	if err := json.Unmarshal(manifest["annotations"], &annotations); err != nil {
 		t.Fatalf("annotations unmarshal: %v", err)
 	}
+
 	if annotations["product_email"] != "alex@goodkind.io" {
 		t.Fatalf("product_email = %q", annotations["product_email"])
 	}
+
 	if annotations["product_id"] != "os-cloudflared" {
 		t.Fatalf("product_id = %q", annotations["product_id"])
 	}
+
 	if _, exists := manifest["product_email"]; exists {
 		t.Fatalf("product_email should not be top-level: %v", manifest)
 	}
@@ -205,24 +227,36 @@ func TestCreatePkgArchiveUsesLegacyManifestLayout(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(binDir, "cloudflared"), []byte("binary"), 0o755); err != nil {
+
+	if err := os.WriteFile(
+		filepath.Join(binDir, "cloudflared"),
+		[]byte("binary"),
+		0o755,
+	); err != nil {
 		t.Fatal(err)
 	}
 
 	plistPath := filepath.Join(tempDir, "plist")
-	if err := os.WriteFile(plistPath, []byte("/usr/local/bin/cloudflared\n@dir /usr/local/etc/cloudflared\n"), 0o644); err != nil {
+	if err := os.WriteFile(
+		plistPath,
+		[]byte("/usr/local/bin/cloudflared\n@dir /usr/local/etc/cloudflared\n"),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 
 	outputPath := filepath.Join(tempDir, "cloudflared.pkg")
-	manifest := strings.Join([]string{
-		"name: os-cloudflared",
-		"version: \"2026.6.0_1\"",
-		"origin: opnsense/os-cloudflared",
-		"prefix: /usr/local",
-		"categories: [ \"net\" ]",
-		"",
-	}, "\n")
+	manifest := strings.Join(
+		[]string{
+			"name: os-cloudflared",
+			"version: \"2026.6.0_1\"",
+			"origin: opnsense/os-cloudflared",
+			"prefix: /usr/local",
+			"categories: [ \"net\" ]",
+			"",
+		},
+		"\n",
+	)
 	scripts := map[string]string{"post-install": "#!/bin/sh\necho ok\n"}
 	parsedManifest, err := parseUCLManifest(manifest)
 	if err != nil {
@@ -246,14 +280,17 @@ func TestCreatePkgArchiveUsesLegacyManifestLayout(t *testing.T) {
 	if err := json.Unmarshal(manifestBody, &full); err != nil {
 		t.Fatalf("unmarshal +MANIFEST: %v", err)
 	}
+
 	files, ok := full["files"].(map[string]any)
 	if !ok {
 		t.Fatalf("files type = %T", full["files"])
 	}
+
 	hashValue, ok := files["/usr/local/bin/cloudflared"].(string)
 	if !ok {
 		t.Fatalf("hash value type = %T", files["/usr/local/bin/cloudflared"])
 	}
+
 	if !strings.HasPrefix(hashValue, "1$") {
 		t.Fatalf("hash value = %q, want legacy 1$ prefix", hashValue)
 	}
@@ -262,6 +299,7 @@ func TestCreatePkgArchiveUsesLegacyManifestLayout(t *testing.T) {
 	if !ok {
 		t.Fatalf("directories type = %T", full["directories"])
 	}
+
 	if directories["/usr/local/etc/cloudflared"] != "y" {
 		t.Fatalf("directory marker = %v, want y", directories["/usr/local/etc/cloudflared"])
 	}
@@ -274,12 +312,15 @@ func TestCreatePkgArchiveUsesLegacyManifestLayout(t *testing.T) {
 	if err := json.Unmarshal(compactManifestBody, &compact); err != nil {
 		t.Fatalf("unmarshal +COMPACT_MANIFEST: %v", err)
 	}
+
 	if _, exists := compact["files"]; exists {
 		t.Fatalf("compact manifest unexpectedly contains files: %v", compact)
 	}
+
 	if _, exists := compact["directories"]; exists {
 		t.Fatalf("compact manifest unexpectedly contains directories: %v", compact)
 	}
+
 	if _, exists := compact["scripts"]; exists {
 		t.Fatalf("compact manifest unexpectedly contains scripts: %v", compact)
 	}
@@ -292,6 +333,7 @@ func readPkgManifestFiles(t *testing.T, pkgPath string) ([]byte, []byte) {
 	if err != nil {
 		t.Fatalf("read pkg: %v", err)
 	}
+
 	decoder, err := zstd.NewReader(bytes.NewReader(pkgData))
 	if err != nil {
 		t.Fatalf("zstd reader: %v", err)
@@ -307,6 +349,7 @@ func readPkgManifestFiles(t *testing.T, pkgPath string) ([]byte, []byte) {
 		if errors.Is(err, io.EOF) {
 			break
 		}
+
 		if err != nil {
 			t.Fatalf("read tar entry: %v", err)
 		}
@@ -317,18 +360,21 @@ func readPkgManifestFiles(t *testing.T, pkgPath string) ([]byte, []byte) {
 			if err != nil {
 				t.Fatalf("read %s body: %v", header.Name, err)
 			}
+
 			manifestBody = body
 		case "+COMPACT_MANIFEST":
 			body, err := io.ReadAll(tarReader)
 			if err != nil {
 				t.Fatalf("read %s body: %v", header.Name, err)
 			}
+
 			compactManifestBody = body
 		default:
 			if _, err := io.Copy(io.Discard, tarReader); err != nil {
 				t.Fatalf("discard %s body: %v", header.Name, err)
 			}
 		}
+
 		if len(manifestBody) > 0 && len(compactManifestBody) > 0 {
 			break
 		}
@@ -337,108 +383,138 @@ func readPkgManifestFiles(t *testing.T, pkgPath string) ([]byte, []byte) {
 	if len(manifestBody) == 0 {
 		t.Fatal("missing +MANIFEST in pkg archive")
 	}
+
 	if len(compactManifestBody) == 0 {
 		t.Fatal("missing +COMPACT_MANIFEST in pkg archive")
 	}
+
 	return manifestBody, compactManifestBody
 }
 
 func Test_copyFile(t *testing.T) {
 	t.Parallel()
 
-	t.Run("copies content correctly with given mode", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		src := filepath.Join(tmp, "src.txt")
-		if err := os.WriteFile(src, []byte("hello"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		dst := filepath.Join(tmp, "dst.txt")
-		if err := copyFile(src, dst, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		data, err := os.ReadFile(dst)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(data) != "hello" {
-			t.Fatalf("content: %q", data)
-		}
-		fi, err := os.Stat(dst)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if fi.Mode().Perm()&0o777 != 0o644 {
-			t.Fatalf("mode: %v", fi.Mode())
-		}
-	})
+	t.Run(
+		"copies content correctly with given mode",
+		func(t *testing.T) {
+			t.Parallel()
+			tmp := t.TempDir()
+			src := filepath.Join(tmp, "src.txt")
+			if err := os.WriteFile(src, []byte("hello"), 0o644); err != nil {
+				t.Fatal(err)
+			}
 
-	t.Run("creates parent directories if missing", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		src := filepath.Join(tmp, "a.txt")
-		if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		dst := filepath.Join(tmp, "nested", "deep", "b.txt")
-		if err := copyFile(src, dst, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		data, err := os.ReadFile(dst)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(data) != "x" {
-			t.Fatalf("content: %q", data)
-		}
-	})
+			dst := filepath.Join(tmp, "dst.txt")
+			if err := copyFile(src, dst, 0o644); err != nil {
+				t.Fatal(err)
+			}
 
-	t.Run("source not found returns error", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		err := copyFile(filepath.Join(tmp, "missing"), filepath.Join(tmp, "out"), 0o644)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("got %v", err)
-		}
-	})
+			data, err := os.ReadFile(dst)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	t.Run("mkdirall fails when parent path is a file", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		block := filepath.Join(tmp, "block")
-		if err := os.WriteFile(block, []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		src := filepath.Join(tmp, "src.txt")
-		if err := os.WriteFile(src, []byte("y"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		dst := filepath.Join(block, "nested", "out.txt")
-		err := copyFile(src, dst, 0o644)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
+			if string(data) != "hello" {
+				t.Fatalf("content: %q", data)
+			}
 
-	t.Run("open destination fails when destination is a directory", func(t *testing.T) {
-		t.Parallel()
-		tmp := t.TempDir()
-		src := filepath.Join(tmp, "src.txt")
-		if err := os.WriteFile(src, []byte("z"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		dstDir := filepath.Join(tmp, "dstdir")
-		if err := os.MkdirAll(dstDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		err := copyFile(src, dstDir, 0o644)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-	})
+			fi, err := os.Stat(dst)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if fi.Mode().Perm()&0o777 != 0o644 {
+				t.Fatalf("mode: %v", fi.Mode())
+			}
+		},
+	)
+
+	t.Run(
+		"creates parent directories if missing",
+		func(t *testing.T) {
+			t.Parallel()
+			tmp := t.TempDir()
+			src := filepath.Join(tmp, "a.txt")
+			if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			dst := filepath.Join(tmp, "nested", "deep", "b.txt")
+			if err := copyFile(src, dst, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			data, err := os.ReadFile(dst)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if string(data) != "x" {
+				t.Fatalf("content: %q", data)
+			}
+		},
+	)
+
+	t.Run(
+		"source not found returns error",
+		func(t *testing.T) {
+			t.Parallel()
+			tmp := t.TempDir()
+			err := copyFile(filepath.Join(tmp, "missing"), filepath.Join(tmp, "out"), 0o644)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+
+			if !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("got %v", err)
+			}
+		},
+	)
+
+	t.Run(
+		"mkdirall fails when parent path is a file",
+		func(t *testing.T) {
+			t.Parallel()
+			tmp := t.TempDir()
+			block := filepath.Join(tmp, "block")
+			if err := os.WriteFile(block, []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			src := filepath.Join(tmp, "src.txt")
+			if err := os.WriteFile(src, []byte("y"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			dst := filepath.Join(block, "nested", "out.txt")
+			err := copyFile(src, dst, 0o644)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+		},
+	)
+
+	t.Run(
+		"open destination fails when destination is a directory",
+		func(t *testing.T) {
+			t.Parallel()
+			tmp := t.TempDir()
+			src := filepath.Join(tmp, "src.txt")
+			if err := os.WriteFile(src, []byte("z"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			dstDir := filepath.Join(tmp, "dstdir")
+			if err := os.MkdirAll(dstDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			err := copyFile(src, dstDir, 0o644)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+		},
+	)
 }
 
 // withStateFiles temporarily overrides the stateFile and revisionFile package
@@ -456,97 +532,127 @@ func withStateFiles(t *testing.T, dir string) {
 }
 
 func Test_readState(t *testing.T) {
-	t.Run("returns empty string when file missing", func(t *testing.T) {
-		withStateFiles(t, t.TempDir())
-		got := readState()
-		if got != "" {
-			t.Fatalf("readState() = %q, want empty", got)
-		}
-	})
+	t.Run(
+		"returns empty string when file missing",
+		func(t *testing.T) {
+			withStateFiles(t, t.TempDir())
+			got := readState()
+			if got != "" {
+				t.Fatalf("readState() = %q, want empty", got)
+			}
+		},
+	)
 
-	t.Run("returns trimmed content when file present", func(t *testing.T) {
-		dir := t.TempDir()
-		withStateFiles(t, dir)
-		if err := os.WriteFile(stateFile, []byte("2026.3.0\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		got := readState()
-		if got != "2026.3.0" {
-			t.Fatalf("readState() = %q, want %q", got, "2026.3.0")
-		}
-	})
+	t.Run(
+		"returns trimmed content when file present",
+		func(t *testing.T) {
+			dir := t.TempDir()
+			withStateFiles(t, dir)
+			if err := os.WriteFile(stateFile, []byte("2026.3.0\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			got := readState()
+			if got != "2026.3.0" {
+				t.Fatalf("readState() = %q, want %q", got, "2026.3.0")
+			}
+		},
+	)
 }
 
 func Test_readRevision(t *testing.T) {
-	t.Run("returns 1 and error when file missing", func(t *testing.T) {
-		withStateFiles(t, t.TempDir())
-		got, err := readRevision()
-		if got != 1 {
-			t.Fatalf("readRevision() = %d, want 1", got)
-		}
-		if err == nil {
-			t.Fatal("readRevision: expected error for missing file")
-		}
-	})
+	t.Run(
+		"returns 1 and error when file missing",
+		func(t *testing.T) {
+			withStateFiles(t, t.TempDir())
+			got, err := readRevision()
+			if got != 1 {
+				t.Fatalf("readRevision() = %d, want 1", got)
+			}
 
-	t.Run("returns parsed integer when file present", func(t *testing.T) {
-		dir := t.TempDir()
-		withStateFiles(t, dir)
-		if err := os.WriteFile(revisionFile, []byte("5\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		got, err := readRevision()
-		if err != nil {
-			t.Fatalf("readRevision: %v", err)
-		}
-		if got != 5 {
-			t.Fatalf("readRevision() = %d, want 5", got)
-		}
-	})
+			if err == nil {
+				t.Fatal("readRevision: expected error for missing file")
+			}
+		},
+	)
 
-	t.Run("returns error when file contains non-integer", func(t *testing.T) {
-		dir := t.TempDir()
-		withStateFiles(t, dir)
-		if err := os.WriteFile(revisionFile, []byte("notanumber\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		_, err := readRevision()
-		if err == nil {
-			t.Fatal("readRevision: expected error for invalid integer")
-		}
-		var numErr *strconv.NumError
-		if !errors.As(err, &numErr) {
-			t.Fatalf("readRevision: expected *strconv.NumError, got %T: %v", err, err)
-		}
-	})
+	t.Run(
+		"returns parsed integer when file present",
+		func(t *testing.T) {
+			dir := t.TempDir()
+			withStateFiles(t, dir)
+			if err := os.WriteFile(revisionFile, []byte("5\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := readRevision()
+			if err != nil {
+				t.Fatalf("readRevision: %v", err)
+			}
+
+			if got != 5 {
+				t.Fatalf("readRevision() = %d, want 5", got)
+			}
+		},
+	)
+
+	t.Run(
+		"returns error when file contains non-integer",
+		func(t *testing.T) {
+			dir := t.TempDir()
+			withStateFiles(t, dir)
+			if err := os.WriteFile(revisionFile, []byte("notanumber\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := readRevision()
+			if err == nil {
+				t.Fatal("readRevision: expected error for invalid integer")
+			}
+
+			var numErr *strconv.NumError
+			if !errors.As(err, &numErr) {
+				t.Fatalf("readRevision: expected *strconv.NumError, got %T: %v", err, err)
+			}
+		},
+	)
 }
 
 func Test_validatePublishFlags(t *testing.T) {
 	t.Parallel()
 
-	t.Run("rejects preview with check-only", func(t *testing.T) {
-		t.Parallel()
-		cfg := &config{preview: true, checkOnly: true}
-		if err := cfg.validatePublishFlags(); err == nil {
-			t.Fatal("validatePublishFlags accepted -preview with -check-only")
-		}
-	})
+	t.Run(
+		"rejects preview with check-only",
+		func(t *testing.T) {
+			t.Parallel()
+			cfg := &config{preview: true, checkOnly: true}
+			if err := cfg.validatePublishFlags(); err == nil {
+				t.Fatal("validatePublishFlags accepted -preview with -check-only")
+			}
+		},
+	)
 
-	t.Run("rejects preview-prefix without preview", func(t *testing.T) {
-		t.Parallel()
-		cfg := &config{previewPrefix: "previews/pr-1"}
-		if err := cfg.validatePublishFlags(); err == nil {
-			t.Fatal("validatePublishFlags accepted -preview-prefix without -preview")
-		}
-	})
+	t.Run(
+		"rejects preview-prefix without preview",
+		func(t *testing.T) {
+			t.Parallel()
+			cfg := &config{previewPrefix: "previews/pr-1"}
+			if err := cfg.validatePublishFlags(); err == nil {
+				t.Fatal("validatePublishFlags accepted -preview-prefix without -preview")
+			}
+		},
+	)
 
-	t.Run("accepts preview with a prefix", func(t *testing.T) {
-		t.Parallel()
-		cfg := &config{preview: true, previewPrefix: "previews/pr-1"}
-		if err := cfg.validatePublishFlags(); err != nil {
-			t.Fatalf("validatePublishFlags rejected a valid preview config: %v", err)
-		}
-	})
+	t.Run(
+		"accepts preview with a prefix",
+		func(t *testing.T) {
+			t.Parallel()
+			cfg := &config{preview: true, previewPrefix: "previews/pr-1"}
+			if err := cfg.validatePublishFlags(); err != nil {
+				t.Fatalf("validatePublishFlags rejected a valid preview config: %v", err)
+			}
+		},
+	)
 }
 
 func TestCmdPublishPreviewBypassesProductionDecision(t *testing.T) {
@@ -568,46 +674,62 @@ func TestCmdPublishPreviewBypassesProductionDecision(t *testing.T) {
 	if err == nil {
 		t.Fatal("cmdPublish preview returned nil error")
 	}
+
 	if err.Error() != "CF_ACCOUNT_ID is missing or malformed" {
-		t.Fatalf("cmdPublish preview error = %q, want %q", err, "CF_ACCOUNT_ID is missing or malformed")
+		t.Fatalf(
+			"cmdPublish preview error = %q, want %q",
+			err,
+			"CF_ACCOUNT_ID is missing or malformed",
+		)
 	}
 }
 
 func Test_saveState(t *testing.T) {
-	t.Run("writes version and revision to separate files", func(t *testing.T) {
-		dir := t.TempDir()
-		withStateFiles(t, dir)
-		saveState("2026.3.0", 3)
-		stateData, err := os.ReadFile(stateFile)
-		if err != nil {
-			t.Fatalf("read stateFile: %v", err)
-		}
-		if strings.TrimSpace(string(stateData)) != "2026.3.0" {
-			t.Fatalf("stateFile = %q, want %q", stateData, "2026.3.0")
-		}
-		revData, err := os.ReadFile(revisionFile)
-		if err != nil {
-			t.Fatalf("read revisionFile: %v", err)
-		}
-		if strings.TrimSpace(string(revData)) != "3" {
-			t.Fatalf("revisionFile = %q, want %q", revData, "3")
-		}
-	})
+	t.Run(
+		"writes version and revision to separate files",
+		func(t *testing.T) {
+			dir := t.TempDir()
+			withStateFiles(t, dir)
+			saveState("2026.3.0", 3)
+			stateData, err := os.ReadFile(stateFile)
+			if err != nil {
+				t.Fatalf("read stateFile: %v", err)
+			}
 
-	t.Run("round-trip: saveState then readState/readRevision return same values", func(t *testing.T) {
-		dir := t.TempDir()
-		withStateFiles(t, dir)
-		saveState("2025.1.0", 7)
-		gotVersion := readState()
-		if gotVersion != "2025.1.0" {
-			t.Fatalf("readState() = %q, want %q", gotVersion, "2025.1.0")
-		}
-		gotRevision, err := readRevision()
-		if err != nil {
-			t.Fatalf("readRevision: %v", err)
-		}
-		if gotRevision != 7 {
-			t.Fatalf("readRevision() = %d, want 7", gotRevision)
-		}
-	})
+			if strings.TrimSpace(string(stateData)) != "2026.3.0" {
+				t.Fatalf("stateFile = %q, want %q", stateData, "2026.3.0")
+			}
+
+			revData, err := os.ReadFile(revisionFile)
+			if err != nil {
+				t.Fatalf("read revisionFile: %v", err)
+			}
+
+			if strings.TrimSpace(string(revData)) != "3" {
+				t.Fatalf("revisionFile = %q, want %q", revData, "3")
+			}
+		},
+	)
+
+	t.Run(
+		"round-trip: saveState then readState/readRevision return same values",
+		func(t *testing.T) {
+			dir := t.TempDir()
+			withStateFiles(t, dir)
+			saveState("2025.1.0", 7)
+			gotVersion := readState()
+			if gotVersion != "2025.1.0" {
+				t.Fatalf("readState() = %q, want %q", gotVersion, "2025.1.0")
+			}
+
+			gotRevision, err := readRevision()
+			if err != nil {
+				t.Fatalf("readRevision: %v", err)
+			}
+
+			if gotRevision != 7 {
+				t.Fatalf("readRevision() = %d, want 7", gotRevision)
+			}
+		},
+	)
 }

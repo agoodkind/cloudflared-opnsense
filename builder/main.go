@@ -71,10 +71,26 @@ func main() {
 	repoDir := fs.String("repo-dir", autoRepoDir(), "path to cloudflared-opnsense repo checkout")
 	workDirFlag := fs.String("work-dir", workDir, "scratch directory for builds")
 	pkgRepoDirFlag := fs.String("pkg-repo-dir", pkgRepoDir, "directory for pkg repository output")
-	checkOnly := fs.Bool("check-only", false, "publish: decide and emit outputs only, skip upload and release")
-	releaseOnly := fs.Bool("release-only", false, "publish: create a GitHub release without changing the package repository or latest release")
-	preview := fs.Bool("preview", false, "publish: round-trip packages through a throwaway prefix (upload, verify, delete); never release")
-	previewPrefix := fs.String("preview-prefix", "", "publish: key prefix for -preview objects (for example previews/pr-12)")
+	checkOnly := fs.Bool(
+		"check-only",
+		false,
+		"publish: decide and emit outputs only, skip upload and release",
+	)
+	releaseOnly := fs.Bool(
+		"release-only",
+		false,
+		"publish: create a GitHub release without changing the package repository or latest release",
+	)
+	preview := fs.Bool(
+		"preview",
+		false,
+		"publish: round-trip packages through a throwaway prefix (upload, verify, delete); never release",
+	)
+	previewPrefix := fs.String(
+		"preview-prefix",
+		"",
+		"publish: key prefix for -preview objects (for example previews/pr-12)",
+	)
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		os.Exit(1)
@@ -134,6 +150,7 @@ func main() {
 		// workflow can gate later steps; this is not a failure.
 		os.Exit(1)
 	}
+
 	if err != nil {
 		slog.Error("command failed", "err", err, "command", args[0])
 		fmt.Fprintf(os.Stderr, "cloudflared-builder %s: %v\n", args[0], err)
@@ -147,10 +164,12 @@ func main() {
 var errUpToDate = errors.New("already up-to-date")
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr,
+	fmt.Fprintln(
+		os.Stderr,
 		"usage: cloudflared-builder [-force] [-version v] [-source-commit sha] [-revision n] [-repo-dir d]"+
 			" [-check-only] [-release-only] [-preview] [-preview-prefix p]"+
-			" <check|plan|build|package|repo|publish|run>")
+			" <check|plan|build|package|repo|publish|run>",
+	)
 }
 
 func autoRepoDir() string {
@@ -158,19 +177,23 @@ func autoRepoDir() string {
 	if err != nil {
 		return "."
 	}
+
 	return findRepoDir(filepath.Dir(exe))
 }
 
 func findRepoDir(startDir string) string {
 	dir := startDir
+
 	for range 6 {
 		_, rootModuleErr := os.Stat(filepath.Join(dir, "go.mod"))
 		_, builderModuleErr := os.Stat(filepath.Join(dir, "builder", "go.mod"))
 		if rootModuleErr == nil && builderModuleErr == nil {
 			return dir
 		}
+
 		dir = filepath.Dir(dir)
 	}
+
 	return "."
 }
 
@@ -218,6 +241,7 @@ func (c *config) resolve() (version string, revision int, err error) {
 			rev++
 		}
 	}
+
 	return v, rev, nil
 }
 
@@ -227,15 +251,19 @@ func (c *config) validatePublishFlags() error {
 	if c.releaseOnly && c.version == "" {
 		return errors.New("publish: -release-only requires -version")
 	}
+
 	if c.releaseOnly && c.preview {
 		return errors.New("publish: -release-only and -preview are mutually exclusive")
 	}
+
 	if c.preview && c.checkOnly {
 		return errors.New("publish: -preview and -check-only are mutually exclusive")
 	}
+
 	if c.previewPrefix != "" && !c.preview {
 		return errors.New("publish: -preview-prefix requires -preview")
 	}
+
 	return nil
 }
 
@@ -246,13 +274,16 @@ func cmdCheck(cfg *config) error {
 	if err != nil {
 		return err
 	}
+
 	last := readState()
 	logf(fmt.Sprintf("latest=%s last_built=%s", latest, emptyOr(last, "none")))
 	if latest == last && !cfg.force {
 		logf("already up-to-date")
 		return errUpToDate
 	}
+
 	logf("build needed")
+
 	return nil
 }
 
@@ -261,10 +292,12 @@ func cmdBuild(cfg *config) error {
 	if err != nil {
 		return err
 	}
+
 	if err := validateGitCommit(cfg.sourceCommit, "source commit"); err != nil {
 		slog.Error("validate build source commit failed", "err", err)
 		return fmt.Errorf("build: %w", err)
 	}
+
 	return buildCloudflared(v, cfg.sourceCommit, cfg.repoDir)
 }
 
@@ -273,9 +306,11 @@ func cmdPackage(cfg *config) error {
 	if err != nil {
 		return err
 	}
+
 	if err := createBinaryPackage(v, cfg.repoDir); err != nil {
 		return err
 	}
+
 	return createPluginPackage(v, rev, cfg.repoDir)
 }
 
@@ -284,6 +319,7 @@ func cmdRepo(cfg *config) error {
 	if err != nil {
 		return err
 	}
+
 	return updatePkgRepository(v, rev)
 }
 
@@ -301,13 +337,16 @@ func cmdPublish(cfg *config) error {
 	if err != nil {
 		return err
 	}
+
 	if cfg.preview {
 		if err := verifyUpstreamRelease(v, cfg.sourceCommit); err != nil {
 			slog.Error("preview publish provenance check failed", "err", err)
 			return fmt.Errorf("publish provenance check: %w", err)
 		}
+
 		return previewPublish(v, rev, cfg)
 	}
+
 	if err := verifyUpstreamRelease(v, cfg.sourceCommit); err != nil {
 		slog.Error("publish provenance check failed", "err", err)
 		return fmt.Errorf("publish provenance check: %w", err)
@@ -327,6 +366,7 @@ func cmdPublish(cfg *config) error {
 	if cfg.checkOnly {
 		return nil
 	}
+
 	if !decision.shouldPublish {
 		logf("skipping publish: " + decision.reason)
 		return nil
@@ -343,18 +383,29 @@ func cmdPublish(cfg *config) error {
 		slog.Error("pre-upload provenance check failed", "err", err)
 		return fmt.Errorf("publish provenance recheck: %w", err)
 	}
+
 	if !cfg.releaseOnly {
 		if err := uploadToR2(pkgFiles, pkgRepoDir); err != nil {
 			return err
 		}
 	}
-	if err := createGitHubRelease(v, rev, cfg.sourceCommit, cfg.repoDir, cfg.releaseOnly); err != nil {
+
+	if err := createGitHubRelease(
+		v,
+		rev,
+		cfg.sourceCommit,
+		cfg.repoDir,
+		cfg.releaseOnly,
+	); err != nil {
 		return err
 	}
+
 	if cfg.releaseOnly {
 		return nil
 	}
+
 	saveState(v, rev)
+
 	return nil
 }
 
@@ -363,6 +414,7 @@ func cmdRun(cfg *config) error {
 	if err != nil {
 		return err
 	}
+
 	v := release.Version
 	sourceCommit := release.Commit
 
@@ -376,6 +428,7 @@ func cmdRun(cfg *config) error {
 	if err := runCmd(cfg.repoDir, "git", "fetch", "origin", "main"); err != nil {
 		return err
 	}
+
 	if err := runCmd(cfg.repoDir, "git", "reset", "--hard", "origin/main"); err != nil {
 		return err
 	}
@@ -397,26 +450,34 @@ func cmdRun(cfg *config) error {
 	if err := buildCloudflared(v, sourceCommit, cfg.repoDir); err != nil {
 		return err
 	}
+
 	if err := createBinaryPackage(v, cfg.repoDir); err != nil {
 		return err
 	}
+
 	if err := createPluginPackage(v, rev, cfg.repoDir); err != nil {
 		return err
 	}
+
 	if err := verifyUpstreamRelease(v, sourceCommit); err != nil {
 		return fmt.Errorf("publish provenance check: %w", err)
 	}
+
 	if err := createGitHubRelease(v, rev, sourceCommit, cfg.repoDir, false); err != nil {
 		logf(fmt.Sprintf("WARNING: GitHub release failed: %v (continuing)", err))
 	}
+
 	if err := updatePkgRepository(v, rev); err != nil {
 		return err
 	}
+
 	if err := publishRepositoryMetadata(cfg.repoDir); err != nil {
 		return err
 	}
+
 	saveState(v, rev)
 	logf(fmt.Sprintf("build and release complete (%s_%d)", v, rev))
+
 	return nil
 }
 

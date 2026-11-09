@@ -39,12 +39,17 @@ func (u *recordingR2Uploader) Upload(
 	if err != nil {
 		return nil, err
 	}
-	u.uploads = append(u.uploads, recordedR2Upload{
-		bucketName: bucketName,
-		objectKey:  objectKey,
-		body:       string(data),
-		accountID:  params.AccountID.Value,
-	})
+
+	u.uploads = append(
+		u.uploads,
+		recordedR2Upload{
+			bucketName: bucketName,
+			objectKey:  objectKey,
+			body:       string(data),
+			accountID:  params.AccountID.Value,
+		},
+	)
+
 	return &r2.BucketObjectUploadResponse{}, nil
 }
 
@@ -69,6 +74,7 @@ func (c *recordingR2Client) Get(
 	if status == 0 {
 		status = http.StatusOK
 	}
+
 	return &http.Response{
 		StatusCode: status,
 		Body:       io.NopCloser(strings.NewReader("ok")),
@@ -99,6 +105,7 @@ func TestPrefixedUploadsPrependsPrefix(t *testing.T) {
 		{sourcePath: "/tmp/a.pkg", objectKey: "previews/pr-12/All/a.pkg"},
 		{sourcePath: "/tmp/meta.conf", objectKey: "previews/pr-12/meta.conf"},
 	}
+
 	for i := range got {
 		if got[i] != want[i] {
 			t.Fatalf("prefixedUploads[%d] = %#v, want %#v", i, got[i], want[i])
@@ -121,9 +128,15 @@ func TestRoundTripR2ObjectsUploadsVerifiesDeletes(t *testing.T) {
 
 	client := &recordingR2Client{}
 	key := "previews/pr-1/All/pkg"
-	err := roundTripR2Objects(context.Background(), client, "account123", "bucket-name", []r2Upload{
-		{sourcePath: src, objectKey: key},
-	})
+	err := roundTripR2Objects(
+		context.Background(),
+		client,
+		"account123",
+		"bucket-name",
+		[]r2Upload{
+			{sourcePath: src, objectKey: key},
+		},
+	)
 	if err != nil {
 		t.Fatalf("roundTripR2Objects: %v", err)
 	}
@@ -131,9 +144,11 @@ func TestRoundTripR2ObjectsUploadsVerifiesDeletes(t *testing.T) {
 	if len(client.uploads) != 1 || client.uploads[0].objectKey != key {
 		t.Fatalf("uploads = %#v, want one upload of %q", client.uploads, key)
 	}
+
 	if len(client.gets) != 1 || client.gets[0] != key {
 		t.Fatalf("gets = %#v, want [%q]", client.gets, key)
 	}
+
 	if len(client.deletes) != 1 || client.deletes[0] != key {
 		t.Fatalf("deletes = %#v, want [%q]", client.deletes, key)
 	}
@@ -150,12 +165,19 @@ func TestRoundTripR2ObjectsDeletesAfterVerifyFailure(t *testing.T) {
 
 	client := &recordingR2Client{getStatus: http.StatusNotFound}
 	key := "previews/pr-1/All/pkg"
-	err := roundTripR2Objects(context.Background(), client, "account123", "bucket-name", []r2Upload{
-		{sourcePath: src, objectKey: key},
-	})
+	err := roundTripR2Objects(
+		context.Background(),
+		client,
+		"account123",
+		"bucket-name",
+		[]r2Upload{
+			{sourcePath: src, objectKey: key},
+		},
+	)
 	if err == nil {
 		t.Fatal("roundTripR2Objects succeeded despite a failed verification")
 	}
+
 	if len(client.deletes) != 1 || client.deletes[0] != key {
 		t.Fatalf("deletes = %#v, want the uploaded object cleaned up", client.deletes)
 	}
@@ -169,19 +191,44 @@ func TestR2UploadsMapsPackagesAndMetadata(t *testing.T) {
 	if err := os.MkdirAll(metadataDir, 0o755); err != nil {
 		t.Fatalf("mkdir metadata: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(metadataDir, "meta.conf"), []byte("meta"), 0o644); err != nil {
+
+	if err := os.WriteFile(
+		filepath.Join(metadataDir, "meta.conf"),
+		[]byte("meta"),
+		0o644,
+	); err != nil {
 		t.Fatalf("write meta.conf: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(metadataDir, "meta.pkg"), []byte("meta-pkg"), 0o644); err != nil {
+
+	if err := os.WriteFile(
+		filepath.Join(metadataDir, "meta.pkg"),
+		[]byte("meta-pkg"),
+		0o644,
+	); err != nil {
 		t.Fatalf("write meta.pkg: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(metadataDir, "meta.txz"), []byte("meta-txz"), 0o644); err != nil {
+
+	if err := os.WriteFile(
+		filepath.Join(metadataDir, "meta.txz"),
+		[]byte("meta-txz"),
+		0o644,
+	); err != nil {
 		t.Fatalf("write meta.txz: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(metadataDir, "packagesite.pkg"), []byte("site-pkg"), 0o644); err != nil {
+
+	if err := os.WriteFile(
+		filepath.Join(metadataDir, "packagesite.pkg"),
+		[]byte("site-pkg"),
+		0o644,
+	); err != nil {
 		t.Fatalf("write packagesite.pkg: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(metadataDir, "packagesite.txz"), []byte("site-txz"), 0o644); err != nil {
+
+	if err := os.WriteFile(
+		filepath.Join(metadataDir, "packagesite.txz"),
+		[]byte("site-txz"),
+		0o644,
+	); err != nil {
 		t.Fatalf("write packagesite.txz: %v", err)
 	}
 
@@ -197,8 +244,14 @@ func TestR2UploadsMapsPackagesAndMetadata(t *testing.T) {
 	}
 
 	want := []r2Upload{
-		{sourcePath: filepath.Join(tempDir, "cloudflared-2026.6.0.pkg"), objectKey: "All/cloudflared-2026.6.0.pkg"},
-		{sourcePath: filepath.Join(tempDir, "os-cloudflared-2026.6.0_1.pkg"), objectKey: "All/os-cloudflared-2026.6.0_1.pkg"},
+		{
+			sourcePath: filepath.Join(tempDir, "cloudflared-2026.6.0.pkg"),
+			objectKey:  "All/cloudflared-2026.6.0.pkg",
+		},
+		{
+			sourcePath: filepath.Join(tempDir, "os-cloudflared-2026.6.0_1.pkg"),
+			objectKey:  "All/os-cloudflared-2026.6.0_1.pkg",
+		},
 		{sourcePath: filepath.Join(metadataDir, "meta.conf"), objectKey: "meta.conf"},
 		{sourcePath: filepath.Join(metadataDir, "meta.pkg"), objectKey: "meta.pkg"},
 		{sourcePath: filepath.Join(metadataDir, "meta.txz"), objectKey: "meta.txz"},
@@ -208,6 +261,7 @@ func TestR2UploadsMapsPackagesAndMetadata(t *testing.T) {
 	if len(uploads) != len(want) {
 		t.Fatalf("len(uploads) = %d, want %d: %#v", len(uploads), len(want), uploads)
 	}
+
 	for i := range uploads {
 		if uploads[i] != want[i] {
 			t.Fatalf("uploads[%d] = %#v, want %#v", i, uploads[i], want[i])
@@ -225,22 +279,31 @@ func TestUploadR2ObjectsUsesCloudflareParams(t *testing.T) {
 	}
 
 	uploader := &recordingR2Uploader{}
-	err := uploadR2Objects(context.Background(), uploader, "account123", "bucket-name", []r2Upload{
-		{sourcePath: src, objectKey: "meta"},
-	})
+	err := uploadR2Objects(
+		context.Background(),
+		uploader,
+		"account123",
+		"bucket-name",
+		[]r2Upload{
+			{sourcePath: src, objectKey: "meta"},
+		},
+	)
 	if err != nil {
 		t.Fatalf("uploadR2Objects: %v", err)
 	}
 
-	want := []recordedR2Upload{{
-		bucketName: "bucket-name",
-		objectKey:  "meta",
-		body:       "metadata",
-		accountID:  "account123",
-	}}
+	want := []recordedR2Upload{
+		{
+			bucketName: "bucket-name",
+			objectKey:  "meta",
+			body:       "metadata",
+			accountID:  "account123",
+		},
+	}
 	if len(uploader.uploads) != len(want) {
 		t.Fatalf("len(uploads) = %d, want %d", len(uploader.uploads), len(want))
 	}
+
 	if uploader.uploads[0] != want[0] {
 		t.Fatalf("upload = %#v, want %#v", uploader.uploads[0], want[0])
 	}
@@ -255,21 +318,30 @@ func TestUploadR2ObjectRejectsOversizedControlPlaneObject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create source: %v", err)
 	}
+
 	if err := file.Truncate(maxR2ControlPlaneUploadBytes + 1); err != nil {
 		t.Fatalf("truncate source: %v", err)
 	}
+
 	if err := file.Close(); err != nil {
 		t.Fatalf("close source: %v", err)
 	}
 
 	uploader := &recordingR2Uploader{}
-	err = uploadR2Object(context.Background(), uploader, "account123", "bucket-name", r2Upload{
-		sourcePath: src,
-		objectKey:  "All/too-large.pkg",
-	})
+	err = uploadR2Object(
+		context.Background(),
+		uploader,
+		"account123",
+		"bucket-name",
+		r2Upload{
+			sourcePath: src,
+			objectKey:  "All/too-large.pkg",
+		},
+	)
 	if err == nil {
 		t.Fatal("uploadR2Object succeeded for an oversized object")
 	}
+
 	if len(uploader.uploads) != 0 {
 		t.Fatalf("len(uploads) = %d, want 0", len(uploader.uploads))
 	}
@@ -283,6 +355,7 @@ func TestRequiredCloudflareCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("requiredR2AccountID: %v", err)
 	}
+
 	if accountID != "account123" {
 		t.Fatalf("accountID = %q, want account123", accountID)
 	}
@@ -291,6 +364,7 @@ func TestRequiredCloudflareCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("requiredCloudflareAPIToken: %v", err)
 	}
+
 	if token != "token" {
 		t.Fatalf("token = %q, want token", token)
 	}
@@ -303,6 +377,7 @@ func TestRequiredCloudflareCredentialsRejectMissingValues(t *testing.T) {
 	if _, err := requiredR2AccountID(); err == nil {
 		t.Fatal("requiredR2AccountID succeeded with empty account id")
 	}
+
 	if _, err := requiredCloudflareAPIToken(); err == nil {
 		t.Fatal("requiredCloudflareAPIToken succeeded with empty token")
 	}
@@ -313,10 +388,7 @@ func TestCloudflareSDKR2UploadRequestShape(t *testing.T) {
 
 	var requestBody bytes.Buffer
 	server := newCloudflareR2UploadServer(t, &requestBody)
-	client := cloudflare.NewClient(
-		option.WithBaseURL(server.URL),
-		option.WithAPIToken("token"),
-	)
+	client := cloudflare.NewClient(option.WithBaseURL(server.URL), option.WithAPIToken("token"))
 
 	_, err := client.R2.Buckets.Objects.Upload(
 		context.Background(),
@@ -330,6 +402,7 @@ func TestCloudflareSDKR2UploadRequestShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SDK upload: %v", err)
 	}
+
 	if requestBody.String() != "pkg" {
 		t.Fatalf("request body = %q, want pkg", requestBody.String())
 	}
@@ -338,30 +411,41 @@ func TestCloudflareSDKR2UploadRequestShape(t *testing.T) {
 func newCloudflareR2UploadServer(t *testing.T, requestBody *bytes.Buffer) *httptest.Server {
 	t.Helper()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
-			t.Errorf("method = %s, want PUT", r.Method)
-			http.Error(w, "unexpected method", http.StatusBadRequest)
-			return
-		}
-		wantPath := "/accounts/account123/r2/buckets/bucket-name/objects/All/example.pkg"
-		if r.URL.Path != wantPath {
-			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
-			http.Error(w, "unexpected path", http.StatusBadRequest)
-			return
-		}
-		if r.Header.Get("Authorization") != "Bearer token" {
-			t.Errorf("Authorization = %q, want Bearer token", r.Header.Get("Authorization"))
-			http.Error(w, "unexpected authorization", http.StatusUnauthorized)
-			return
-		}
-		if _, err := io.Copy(requestBody, r.Body); err != nil {
-			t.Errorf("read body: %v", err)
-			http.Error(w, "read body failed", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPut {
+				t.Errorf("method = %s, want PUT", r.Method)
+				http.Error(w, "unexpected method", http.StatusBadRequest)
+
+				return
+			}
+
+			wantPath := "/accounts/account123/r2/buckets/bucket-name/objects/All/example.pkg"
+			if r.URL.Path != wantPath {
+				t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
+				http.Error(w, "unexpected path", http.StatusBadRequest)
+
+				return
+			}
+
+			if r.Header.Get("Authorization") != "Bearer token" {
+				t.Errorf("Authorization = %q, want Bearer token", r.Header.Get("Authorization"))
+				http.Error(w, "unexpected authorization", http.StatusUnauthorized)
+
+				return
+			}
+
+			if _, err := io.Copy(requestBody, r.Body); err != nil {
+				t.Errorf("read body: %v", err)
+				http.Error(w, "read body failed", http.StatusInternalServerError)
+
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(
+				[]byte(
+					`{
 			"result": {
 				"etag": "etag",
 				"key": "All/example.pkg",
@@ -373,8 +457,12 @@ func newCloudflareR2UploadServer(t *testing.T, requestBody *bytes.Buffer) *httpt
 			"success": true,
 			"errors": [],
 			"messages": []
-		}`))
-	}))
+		}`,
+				),
+			)
+		}),
+	)
 	t.Cleanup(server.Close)
+
 	return server
 }

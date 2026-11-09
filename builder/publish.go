@@ -22,7 +22,13 @@ import (
 
 // ---- publish ---------------------------------------------------------------
 
-func createGitHubRelease(version string, revision int, sourceCommit string, repoDir string, releaseOnly bool) error {
+func createGitHubRelease(
+	version string,
+	revision int,
+	sourceCommit string,
+	repoDir string,
+	releaseOnly bool,
+) error {
 	pkgVersion := fmt.Sprintf("%s_%d", version, revision)
 	tag := version + "-freebsd-r" + strconv.Itoa(revision)
 	pluginPkg := filepath.Join(pkgRepoDir, "All", pluginName+"-"+pkgVersion+".pkg")
@@ -42,22 +48,32 @@ func createGitHubRelease(version string, revision int, sourceCommit string, repo
 			"Upstream commit: `%s`\n\n"+
 			"- cloudflared-%s.pkg: Binary package\n"+
 			"- %s-%s.pkg: OPNsense plugin package",
-		version, sourceCommit, version, pluginName, pkgVersion,
+		version,
+		sourceCommit,
+		version,
+		pluginName,
+		pkgVersion,
 	)
 
 	if releaseOnly {
 		notes += "\n\n" + releaseOnlyMarker
 	}
+
 	args := []string{
-		"release", "create", tag,
-		"--title", fmt.Sprintf("Cloudflared %s packages for FreeBSD (revision %d)", version, revision),
-		"--notes", notes,
+		"release",
+		"create",
+		tag,
+		"--title",
+		fmt.Sprintf("Cloudflared %s packages for FreeBSD (revision %d)", version, revision),
+		"--notes",
+		notes,
 		binaryPkg,
 		pluginPkg,
 	}
 	if releaseOnly {
 		args = append(args, "--latest=false")
 	}
+
 	return runCmd(repoDir, "gh", args...)
 }
 
@@ -69,6 +85,7 @@ func publishRepositoryMetadata(repoDir string) error {
 		slog.Error("remove pkg dst failed", "err", err, "path", pkgDst)
 		return fmt.Errorf("remove %s: %w", pkgDst, err)
 	}
+
 	if err := os.MkdirAll(pkgDst, 0o755); err != nil {
 		slog.Error("create pkg dst failed", "err", err, "path", pkgDst)
 		return fmt.Errorf("mkdir %s: %w", pkgDst, err)
@@ -97,13 +114,17 @@ func publishRepositoryMetadata(repoDir string) error {
 		logf("no metadata changes to publish")
 		return nil
 	}
+
 	if err := runCmd(repoDir, "git", "commit", "-m", "Update pkg repository"); err != nil {
 		return err
 	}
+
 	if err := runCmd(repoDir, "git", "push", "origin", "main"); err != nil {
 		return err
 	}
+
 	logf("pushed metadata to main branch")
+
 	return nil
 }
 
@@ -114,6 +135,7 @@ func readState() string {
 	if err != nil {
 		return ""
 	}
+
 	return strings.TrimSpace(string(data))
 }
 
@@ -125,11 +147,13 @@ func readRevision() (int, error) {
 		slog.Warn("read revision file failed", "err", err, "path", revisionFile)
 		return 1, fmt.Errorf("read revision file: %w", err)
 	}
+
 	rev, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
 		slog.Warn("parse revision failed", "err", err, "path", revisionFile)
 		return 1, fmt.Errorf("parse revision: %w", err)
 	}
+
 	return rev, nil
 }
 
@@ -137,6 +161,7 @@ func saveState(version string, revision int) {
 	if err := os.WriteFile(stateFile, []byte(version+"\n"), 0o600); err != nil {
 		slog.Error("write state file failed", "err", err, "path", stateFile)
 	}
+
 	if err := os.WriteFile(revisionFile, []byte(strconv.Itoa(revision)+"\n"), 0o600); err != nil {
 		slog.Error("write revision file failed", "err", err, "path", revisionFile)
 	}
@@ -149,6 +174,7 @@ func latestGitHubVersion() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return release.Version, nil
 }
 
@@ -178,6 +204,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		slog.Error("copy file contents failed", "err", err, "src", src, "dst", dst)
 		return fmt.Errorf("copy %s to %s: %w", src, dst, err)
 	}
+
 	return nil
 }
 
@@ -201,6 +228,7 @@ func runCmd(dir string, name string, args ...string) error {
 		slog.Error("command failed", "err", err, "command", name)
 		return fmt.Errorf("run %s: %w", name, err)
 	}
+
 	return nil
 }
 
@@ -214,6 +242,7 @@ func runCmdWithEnv(dir string, env map[string]string, name string, args ...strin
 		slog.Error("command failed", "err", err, "command", name)
 		return fmt.Errorf("run %s: %w", name, err)
 	}
+
 	return nil
 }
 
@@ -222,6 +251,7 @@ func envToPairs(values map[string]string) []string {
 	for key, value := range values {
 		pairs = append(pairs, fmt.Sprintf("%s=%s", key, value))
 	}
+
 	return pairs
 }
 
@@ -237,6 +267,7 @@ func emptyOr(s, dflt string) string {
 	if s == "" {
 		return dflt
 	}
+
 	return s
 }
 
@@ -287,18 +318,21 @@ func cmdPlan(cfg *config) error {
 		slog.Error("resolve upstream release failed", "err", err)
 		return fmt.Errorf("resolve upstream release: %w", err)
 	}
+
 	v := release.Version
 
 	highest, _, err := publishedRevisions(v, cfg.repoDir)
 	if err != nil {
 		return err
 	}
+
 	rev := highest + 1
 
 	writeGitHubOutput("version", v)
 	writeGitHubOutput("revision", strconv.Itoa(rev))
 	writeGitHubOutput("source_commit", release.Commit)
 	logf(fmt.Sprintf("upstream=%s highest_published=r%d building=r%d", v, highest, rev))
+
 	return nil
 }
 
@@ -312,6 +346,7 @@ func readPackageManifest(pkgPath string) (map[string]json.RawMessage, error) {
 		slog.Error("open package failed", "err", err, "path", pkgPath)
 		return nil, fmt.Errorf("open %s: %w", pkgPath, err)
 	}
+
 	defer func() { _ = f.Close() }()
 
 	zr, err := zstd.NewReader(f)
@@ -322,30 +357,37 @@ func readPackageManifest(pkgPath string) (map[string]json.RawMessage, error) {
 	defer zr.Close()
 
 	tr := tar.NewReader(zr)
+
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
+
 		if err != nil {
 			slog.Error("read tar entry failed", "err", err, "path", pkgPath)
 			return nil, fmt.Errorf("tar read %s: %w", pkgPath, err)
 		}
+
 		if hdr.Name != "+MANIFEST" {
 			continue
 		}
+
 		data, err := io.ReadAll(io.LimitReader(tr, maxManifestBytes))
 		if err != nil {
 			slog.Error("read manifest body failed", "err", err, "path", pkgPath)
 			return nil, fmt.Errorf("read +MANIFEST %s: %w", pkgPath, err)
 		}
+
 		manifest := map[string]json.RawMessage{}
 		if err := json.Unmarshal(data, &manifest); err != nil {
 			slog.Error("decode manifest failed", "err", err, "path", pkgPath)
 			return nil, fmt.Errorf("decode +MANIFEST %s: %w", pkgPath, err)
 		}
+
 		return manifest, nil
 	}
+
 	return nil, fmt.Errorf("+MANIFEST not found in %s", pkgPath)
 }
 
@@ -365,6 +407,7 @@ func normalizeManifest(manifest map[string]json.RawMessage, kind pkgKind) error 
 			slog.Error("decode annotations failed", "err", err)
 			return fmt.Errorf("decode annotations: %w", err)
 		}
+
 		delete(annotations, "product_version")
 		delete(annotations, "product_hash")
 		reencoded, err := json.Marshal(annotations)
@@ -372,6 +415,7 @@ func normalizeManifest(manifest map[string]json.RawMessage, kind pkgKind) error 
 			slog.Error("encode annotations failed", "err", err)
 			return fmt.Errorf("encode annotations: %w", err)
 		}
+
 		manifest["annotations"] = reencoded
 	}
 
@@ -381,14 +425,17 @@ func normalizeManifest(manifest map[string]json.RawMessage, kind pkgKind) error 
 			slog.Error("decode files failed", "err", err)
 			return fmt.Errorf("decode files: %w", err)
 		}
+
 		delete(files, "/usr/local/opnsense/version/cloudflared")
 		reencoded, err := json.Marshal(files)
 		if err != nil {
 			slog.Error("encode files failed", "err", err)
 			return fmt.Errorf("encode files: %w", err)
 		}
+
 		manifest["files"] = reencoded
 	}
+
 	return nil
 }
 
@@ -400,7 +447,9 @@ func fingerprintManifest(manifest map[string]json.RawMessage) (string, error) {
 		slog.Error("marshal manifest failed", "err", err)
 		return "", fmt.Errorf("marshal manifest: %w", err)
 	}
+
 	sum := sha256.Sum256(canonical)
+
 	return hex.EncodeToString(sum[:]), nil
 }
 
@@ -412,9 +461,11 @@ func normalizedManifestFingerprint(pkgPath string, kind pkgKind) (string, error)
 	if err != nil {
 		return "", err
 	}
+
 	if err := normalizeManifest(manifest, kind); err != nil {
 		return "", err
 	}
+
 	return fingerprintManifest(manifest)
 }
 
@@ -430,54 +481,85 @@ func publishedRevisions(version, repoDir string) (int, int, error) {
 	highest := 0
 	highestRepository := 0
 	decoder := json.NewDecoder(strings.NewReader(out))
+
 	for {
 		var releases []ghReleaseListItem
 		if err := decoder.Decode(&releases); err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			slog.Error("parse release list failed", "err", err)
+
 			return 0, 0, fmt.Errorf("parse release list: %w", err)
 		}
+
 		for _, release := range releases {
 			if !strings.HasPrefix(release.TagName, prefix) {
 				continue
 			}
+
 			revision, convErr := strconv.Atoi(strings.TrimPrefix(release.TagName, prefix))
 			if convErr != nil {
 				continue
 			}
+
 			if revision > highest {
 				highest = revision
 			}
+
 			if !strings.Contains(release.Body, releaseOnlyMarker) && revision > highestRepository {
 				highestRepository = revision
 			}
 		}
 	}
+
 	return highest, highestRepository, nil
 }
 
 var listPublishedReleases = func(repoDir string) (string, error) {
-	return runCmdOutput(repoDir, "gh", "api", "--paginate",
-		"repos/"+repoSlug+"/releases?per_page=100")
+	return runCmdOutput(
+		repoDir,
+		"gh",
+		"api",
+		"--paginate",
+		"repos/"+repoSlug+"/releases?per_page=100",
+	)
 }
 
 // releaseManifestFingerprint downloads one asset from a release and returns its
 // normalized manifest fingerprint.
-func releaseManifestFingerprint(tag, filename string, kind pkgKind, repoDir string) (string, error) {
+func releaseManifestFingerprint(
+	tag string,
+	filename string,
+	kind pkgKind,
+	repoDir string,
+) (string, error) {
 	tmpDir, err := os.MkdirTemp("", "cf-prev-release-")
 	if err != nil {
 		slog.Error("create temp dir failed", "err", err)
 		return "", fmt.Errorf("mkdir temp: %w", err)
 	}
+
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	if err := runCmd(repoDir, "gh", "release", "download", tag,
-		"--repo", repoSlug, "--pattern", filename, "--dir", tmpDir); err != nil {
+	if err := runCmd(
+		repoDir,
+		"gh",
+		"release",
+		"download",
+		tag,
+		"--repo",
+		repoSlug,
+		"--pattern",
+		filename,
+		"--dir",
+		tmpDir,
+	); err != nil {
 		slog.Error("download release asset failed", "err", err, "tag", tag, "file", filename)
 		return "", fmt.Errorf("download %s from %s: %w", filename, tag, err)
 	}
+
 	return normalizedManifestFingerprint(filepath.Join(tmpDir, filename), kind)
 }
 
@@ -486,7 +568,12 @@ func releaseManifestFingerprint(tag, filename string, kind pkgKind, repoDir stri
 // no prior release for the version, or when either package's normalized content
 // changed. It fails closed: a prior release whose assets cannot be downloaded or
 // hashed is an error rather than a silent publish.
-func decidePublish(version string, revision int, repoDir string, releaseOnly bool) (publishDecision, error) {
+func decidePublish(
+	version string,
+	revision int,
+	repoDir string,
+	releaseOnly bool,
+) (publishDecision, error) {
 	var decision publishDecision
 
 	pkgVersion := version + "_" + strconv.Itoa(revision)
@@ -497,6 +584,7 @@ func decidePublish(version string, revision int, repoDir string, releaseOnly boo
 		slog.Error("binary package missing", "err", err, "path", newBinaryPkg)
 		return decision, fmt.Errorf("binary package not found: %w", err)
 	}
+
 	if _, err := os.Stat(newPluginPkg); err != nil {
 		slog.Error("plugin package missing", "err", err, "path", newPluginPkg)
 		return decision, fmt.Errorf("plugin package not found: %w", err)
@@ -506,18 +594,27 @@ func decidePublish(version string, revision int, repoDir string, releaseOnly boo
 	if err != nil {
 		return decision, err
 	}
+
 	if highest > revision {
-		staleErr := fmt.Errorf("r%d already published for %s; refusing to publish older r%d",
-			highest, version, revision)
+		staleErr := fmt.Errorf(
+			"r%d already published for %s; refusing to publish older r%d",
+			highest,
+			version,
+			revision,
+		)
 		slog.Error("stale revision", "err", staleErr)
+
 		return decision, staleErr
 	}
+
 	if !releaseOnly {
 		highest = highestRepository
 	}
+
 	if highest == 0 {
 		decision.shouldPublish = true
 		decision.reason = "new_version"
+
 		return decision, nil
 	}
 
@@ -529,38 +626,50 @@ func decidePublish(version string, revision int, repoDir string, releaseOnly boo
 	if err != nil {
 		return decision, err
 	}
+
 	newPluginFP, err := normalizedManifestFingerprint(newPluginPkg, pluginPkg)
 	if err != nil {
 		return decision, err
 	}
+
 	prevBinaryFP, err := releaseManifestFingerprint(
-		decision.latestTag, "cloudflared-"+version+".pkg", binaryPkg, repoDir)
+		decision.latestTag,
+		"cloudflared-"+version+".pkg",
+		binaryPkg,
+		repoDir,
+	)
 	if err != nil {
 		return decision, err
 	}
+
 	prevPluginFP, err := releaseManifestFingerprint(
-		decision.latestTag, pluginName+"-"+prevPkgVersion+".pkg", pluginPkg, repoDir)
+		decision.latestTag,
+		pluginName+"-"+prevPkgVersion+".pkg",
+		pluginPkg,
+		repoDir,
+	)
 	if err != nil {
 		return decision, err
 	}
 
 	binaryChanged := newBinaryFP != prevBinaryFP
 	pluginChanged := newPluginFP != prevPluginFP
+	decision.shouldPublish, decision.reason = contentPublishDecision(binaryChanged, pluginChanged)
+
+	return decision, nil
+}
+
+func contentPublishDecision(binaryChanged bool, pluginChanged bool) (bool, string) {
 	switch {
 	case binaryChanged && pluginChanged:
-		decision.shouldPublish = true
-		decision.reason = "binary_and_plugin_content_changed"
+		return true, "binary_and_plugin_content_changed"
 	case binaryChanged:
-		decision.shouldPublish = true
-		decision.reason = "binary_content_changed"
+		return true, "binary_content_changed"
 	case pluginChanged:
-		decision.shouldPublish = true
-		decision.reason = "plugin_content_changed"
+		return true, "plugin_content_changed"
 	default:
-		decision.shouldPublish = false
-		decision.reason = "no_meaningful_change"
+		return false, "no_meaningful_change"
 	}
-	return decision, nil
 }
 
 // runCmdOutput runs a command and captures its stdout, mirroring runCmd but for
@@ -574,6 +683,7 @@ func runCmdOutput(dir, name string, args ...string) (string, error) {
 		slog.Error("command failed", "err", err, "command", name)
 		return "", fmt.Errorf("run %s: %w", name, err)
 	}
+
 	return string(out), nil
 }
 
@@ -584,6 +694,7 @@ func writeGitHubOutput(key, value string) {
 	if path == "" {
 		return
 	}
+
 	// The path is an external (environment) value. Clean it and require an
 	// absolute path so a relative or traversal-laden value cannot redirect the
 	// write outside the runner-provided location.
@@ -592,11 +703,13 @@ func writeGitHubOutput(key, value string) {
 		logf(fmt.Sprintf("WARNING: ignoring non-absolute GITHUB_OUTPUT path: %q", path))
 		return
 	}
+
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		logf(fmt.Sprintf("WARNING: could not write GITHUB_OUTPUT: %v", err))
 		return
 	}
+
 	defer func() { _ = f.Close() }()
 	if _, err := f.WriteString(key + "=" + value + "\n"); err != nil {
 		logf(fmt.Sprintf("WARNING: could not write GITHUB_OUTPUT: %v", err))
