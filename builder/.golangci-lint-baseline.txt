@@ -1,2 +1,195 @@
-# golangci-lint: generated_at=2026-06-17T22:32:51Z
+# golangci-lint: generated_at=2026-11-08T23:26:18Z
+publish.go:595:23: G703: Path traversal via taint analysis (gosec)	# golangci-lint:first_added=2026-11-08T23:26:09Z last_seen=2026-11-08T23:26:09Z
+patches.go:147:11: error-format: fmt.Errorf can be replaced with errors.New (perfsprint)	# golangci-lint:first_added=2026-11-08T23:25:50Z last_seen=2026-11-08T23:25:50Z
+build_pkg.go:341:1: godoc line is too long (78 > 77) (godoclint)	# golangci-lint:first_added=2026-11-08T23:25:37Z last_seen=2026-11-08T23:25:37Z
+publish.go:487:1: godoc line is too long (78 > 77) (godoclint)	# golangci-lint:first_added=2026-11-08T23:25:37Z last_seen=2026-11-08T23:25:37Z
+publish.go:395:1: godoc line is too long (79 > 77) (godoclint)	# golangci-lint:first_added=2026-11-08T23:25:37Z last_seen=2026-11-08T23:25:37Z
+build_pkg.go:96:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:59:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:85:5: avoid inline error handling using `if err := ...; err != nil`; use plain assignment `err := ...` (noinlineerr)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:96:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:85:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:90:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:217:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"binary package not found: %s\", pkgFile)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:219:19: Magic number: 10_000_000, in <condition> detected (mnd)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:220:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"binary package too small (%d bytes)\", info.Size())" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:73:2: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:252:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"plugin package not found: %s\", dstPkg)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:291:31: named return "files" with type "[]string" must not be referenced or used by a naked return (nonamedreturns)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:291:47: named return "dirs" with type "[]string" must not be referenced or used by a naked return (nonamedreturns)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:291:62: named return "err" with type "error" must not be referenced or used by a naked return (nonamedreturns)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:540:2: variable name 'f' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:307:4: continue with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:34:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"refusing to build unsafe cloudflared version %q\", version)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:404:2: missing whitespace above this line (never cuddle decl) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:405:2: missing whitespace above this line (no shared variables above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:429:2: parameter name 'm' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:521:22: parameter name 'tw' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:510:2: missing whitespace above this line (invalid statement above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:577:2: variable name 'm' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:597:2: variable name 'zw' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:623:6: variable name 'e' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:64:15: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"cloned cloudflared tag %s resolved to %s, want %s\",\n\tversion,\n\tclonedCommit,\n\tnormalizedSourceCommit(sourceCommit),\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg.go:92:10: do not define dynamic errors, use wrapped static errors instead: "errors.New(\"build failed: cloudflared binary not found after gmake\")" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg_test.go:280:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg_test.go:92:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg_test.go:73:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg_test.go:80:2: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg_test.go:410:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg_test.go:410:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg_test.go:351:2: missing whitespace above this line (too many statements above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg_test.go:302:4: missing whitespace above this line (invalid statement above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+build_pkg_test.go:338:2: missing whitespace above this line (no shared variables above append) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:384:2: missing whitespace above this line (no shared variables above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:415:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:420:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:420:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:207:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:366:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:191:59: named return "err" with type "error" must not be referenced or used by a naked return (nonamedreturns)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:366:2: variable name 'v' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:228:10: do not define dynamic errors, use wrapped static errors instead: "errors.New(\"publish: -release-only requires -version\")" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:231:10: do not define dynamic errors, use wrapped static errors instead: "errors.New(\"publish: -release-only and -preview are mutually exclusive\")" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:234:10: do not define dynamic errors, use wrapped static errors instead: "errors.New(\"publish: -preview and -check-only are mutually exclusive\")" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:237:10: do not define dynamic errors, use wrapped static errors instead: "errors.New(\"publish: -preview-prefix requires -preview\")" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:418:2: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:79:5: avoid inline error handling using `if err := ...; err != nil`; use plain assignment `err := ...` (noinlineerr)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:66:2: variable name 'fs' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:75:1: The line is 140 characters long, which exceeds the maximum of 120 characters. (lll)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:76:1: The line is 136 characters long, which exceeds the maximum of 120 characters. (lll)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main.go:77:1: The line is 122 characters long, which exceeds the maximum of 120 characters. (lll)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main_test.go:95:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main_test.go:86:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main_test.go:605:3: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main_test.go:517:3: missing whitespace above this line (never cuddle decl) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main_test.go:343:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main_test.go:343:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+main_test.go:452:2: missing whitespace above this line (no shared variables above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+package_manifest.go:21:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+package_manifest.go:39:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+package_manifest.go:26:2: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+package_manifest.go:35:5: avoid inline error handling using `if err := ...; err != nil`; use plain assignment `err := ...` (noinlineerr)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+package_manifest.go:39:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:96:3: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:83:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:83:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:118:4: continue with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:72:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:137:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"patch manifest schema_version = %d, want %d\",\n\tmanifest.SchemaVersion,\n\tpatchManifestSchemaVersion,\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:147:11: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch id must not be empty\")" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:150:11: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch id %q is duplicated\", patch.ID)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:79:5: avoid inline error handling using `if err := ...; err != nil`; use plain assignment `err := ...` (noinlineerr)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:158:11: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q strip must not be negative\", patch.ID)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:416:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:172:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q must declare exactly one source\", patch.ID)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:176:11: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q git remote %q is invalid\", patch.ID, patch.Git.Remote)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:179:11: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q git ref %q is invalid\", patch.ID, patch.Git.Ref)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:182:11: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"patch %q git expected_commit %q must be a full commit SHA\",\n\tpatch.ID,\n\tpatch.Git.ExpectedCommit,\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:192:11: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q file %q is not a safe relative path\", patch.ID, patch.File)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:196:9: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q has no supported source\", patch.ID)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:209:2: missing whitespace above this line (invalid statement above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:242:3: missing whitespace above this line (no shared variables above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:246:3: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:271:23: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q has no git source\", spec.ID)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:300:23: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"patch %q ref %q moved: expected commit %s, fetched %s\",\n\tspec.ID,\n\tspec.Git.Ref,\n\texpectedCommit,\n\tfetchedCommit,\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:316:24: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q commit %s is a merge commit\", spec.ID, fetchedCommit)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:318:23: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q commit %s has no parent\", spec.ID, fetchedCommit)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:365:1: The line is 126 characters long, which exceeds the maximum of 120 characters. (lll)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:366:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"patch %q file %q escapes the manifest directory through a symlink\", patch.ID, patch.File)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches.go:390:29: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"patch %q is neither applicable nor already applied:\\nforward check:\\n%s\\nreverse check:\\n%s\",\n\tspec.ID,\n\tforwardOutput,\n\treverseOutput,\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches_test.go:791:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches_test.go:679:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches_test.go:795:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches_test.go:795:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches_test.go:548:2: missing whitespace above this line (invalid statement above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches_test.go:747:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+patches_test.go:751:2: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+preview_publish.go:29:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+preview_publish.go:29:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:72:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:96:5: avoid inline error handling using `if err := ...; err != nil`; use plain assignment `err := ...` (noinlineerr)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:439:4: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:61:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:98:3: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:595:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:158:2: variable name 'in' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:89:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:212:2: missing whitespace above this line (no shared variables above append) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:290:2: variable name 'v' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:595:2: variable name 'f' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:317:2: variable name 'zr' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:324:2: variable name 'tr' is too short for the scope of its usage (varnamelen)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:349:14: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"+MANIFEST not found in %s\", pkgPath)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:433:2: missing whitespace above this line (no shared variables above for) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:442:3: missing whitespace above this line (invalid statement above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:510:15: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"r%d already published for %s; refusing to publish older r%d\",\n\thighest, version, revision)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:526:2: missing whitespace above this line (no shared variables above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:548:2: missing whitespace above this line (too many statements above switch) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish.go:600:2: missing whitespace above this line (no shared variables above defer) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish_test.go:100:2: missing whitespace above this line (never cuddle decl) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish_test.go:22:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish_test.go:92:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish_test.go:26:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish_test.go:26:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+publish_test.go:19:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:266:3: missing whitespace above this line (invalid statement above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:89:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:89:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:281:6: avoid inline error handling using `if err := ...; err != nil`; use plain assignment `err := ...` (noinlineerr)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:126:2: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:152:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:150:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"upload %s: source is a directory\", upload.sourcePath)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:153:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"upload %s: object is %d bytes, above Cloudflare R2 control-plane limit %d\",\n\tupload.sourcePath,\n\tinfo.Size(),\n\tmaxR2ControlPlaneUploadBytes,\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:66:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:62:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:311:16: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"verify preview object %s: status %d\", objectKey, resp.StatusCode)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:75:14: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"%s is missing or malformed\", cloudflareAccountIDEnv)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload.go:85:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"%s is required for Cloudflare SDK R2 uploads\", cloudflareAPITokenEnv)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload_test.go:68:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload_test.go:358:3: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload_test.go:211:2: missing whitespace above this line (invalid statement above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload_test.go:42:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload_test.go:72:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload_test.go:86:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload_test.go:363:3: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+r2_upload_test.go:98:2: missing whitespace above this line (too many statements above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+release_only_test.go:44:4: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+release_only_test.go:43:4: missing whitespace above this line (no shared variables above append) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+release_only_test.go:51:4: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+repo_metadata.go:37:2: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+repo_metadata.go:29:3: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+repo_metadata.go:37:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+repo_metadata_test.go:39:3: missing whitespace above this line (invalid statement above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+repo_metadata_test.go:53:3: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:85:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:86:2: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:93:3: return with no blank line before (nlreturn)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:98:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:98:5: avoid inline error handling using `if err := ...; err != nil`; use plain assignment `err := ...` (noinlineerr)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:114:29: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"cloudflared tagger email %q is not a cloudflare.com address\", tag.Tagger.Email)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:117:29: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"cloudflared tag target is %q, want commit\", tag.Object.Type)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:124:2: missing whitespace above this line (never cuddle decl) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:138:29: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"cloudflared master comparison is %q, want ahead or identical\",\n\tcomparison.Status,\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:149:10: do not define dynamic errors, use wrapped static errors instead: "errors.New(\"cloudflared release has an empty tag_name\")" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:152:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"unsafe cloudflared release tag %q\", release.TagName)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:155:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"cloudflared release tag is %q, want %q\",\n\trelease.TagName,\n\trequestedVersion,\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:162:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"cloudflared release author is %q, want %q\",\n\trelease.Author.Login,\n\tcloudflaredReleaseAuthor,\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:228:2: missing whitespace above this line (too many lines above return) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:180:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\n\t\"cloudflared release %s now resolves to %s, want %s\",\n\tversion,\n\trelease.Commit,\n\tstrings.ToLower(expectedCommit),\n)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:192:10: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"%s %q is not a 40-character Git commit\", name, commit)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:208:2: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:221:15: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"GitHub API returned status %d for %s\", response.StatusCode, path)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:223:59: Magic number: 20, in <argument> detected (mnd)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:25:43: Magic number: 15, in <assign> detected (mnd)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:63:2: missing whitespace above this line (no shared variables above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:65:30: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"unsafe cloudflared version %q\", version)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream.go:96:29: do not define dynamic errors, use wrapped static errors instead: "fmt.Errorf(\"cloudflared tag %q is %q, want annotated tag\", release.TagName, ref.Object.Type)" (err113)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream_test.go:97:2: missing whitespace above this line (invalid statement above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream_test.go:199:4: missing whitespace above this line (too many statements above if) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream_test.go:215:2: missing whitespace above this line (never cuddle decl) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream_test.go:266:2: missing whitespace above this line (invalid statement above assign) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream_test.go:46:3: missing whitespace above this line (invalid statement above switch) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream_test.go:82:2: missing whitespace above this line (no shared variables above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream_test.go:270:2: missing whitespace above this line (invalid statement above range) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
+upstream_test.go:278:2: missing whitespace above this line (invalid statement above expr) (wsl_v5)	# golangci-lint:first_added=2026-11-08T23:25:20Z last_seen=2026-11-08T23:25:20Z
 publish.go:327:28: G702: Command injection via taint analysis (gosec)	# golangci-lint:first_added=2026-06-17T22:32:51Z last_seen=2026-06-17T22:32:51Z
