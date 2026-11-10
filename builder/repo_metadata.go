@@ -26,6 +26,7 @@ func repoMetadataPaths(metadataDir string) ([]string, error) {
 			slog.Error("stat repo metadata entry failed", "err", err, "name", entry.Name())
 			return nil, fmt.Errorf("stat repo metadata entry %s: %w", entry.Name(), err)
 		}
+
 		if !info.Mode().IsRegular() {
 			continue
 		}
@@ -34,5 +35,6 @@ func repoMetadataPaths(metadataDir string) ([]string, error) {
 	}
 
 	sort.Strings(paths)
+
 	return paths, nil
 }

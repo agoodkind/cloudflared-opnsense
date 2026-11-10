@@ -23,6 +23,7 @@ func parseUCLManifest(manifestUCL string) (map[string]json.RawMessage, error) {
 		slog.Error("parse ucl manifest failed", "err", err)
 		return nil, fmt.Errorf("parse ucl: %w", err)
 	}
+
 	delete(parsed, ucl.KeyOrder)
 
 	data, err := json.Marshal(parsed)
@@ -36,5 +37,6 @@ func parseUCLManifest(manifestUCL string) (map[string]json.RawMessage, error) {
 		slog.Error("unmarshal manifest json failed", "err", err)
 		return nil, fmt.Errorf("unmarshal manifest json: %w", err)
 	}
+
 	return manifest, nil
 }
