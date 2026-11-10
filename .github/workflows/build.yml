@@ -90,7 +90,6 @@ jobs:
       id-token: write
     with:
       go_version_file: builder/go.mod
-      job_layout: parallel
       working_directory: builder
 
   build:

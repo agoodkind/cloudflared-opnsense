@@ -26,5 +26,6 @@ func previewPublish(version string, revision int, cfg *config) error {
 	if keyPrefix == "" {
 		keyPrefix = defaultPreviewPrefix
 	}
+
 	return previewPublishToR2(pkgFiles, pkgRepoDir, keyPrefix)
 }
